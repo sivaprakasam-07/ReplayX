@@ -1,7 +1,11 @@
-import { monitoringData } from "../../data/monitoringData"
 import StatusPill from "../common/StatusPill"
+import { motion, AnimatePresence } from "framer-motion"
 
-const EventTable = () => {
+const EventTable = ({
+    events = [],
+    onSelectEvent,
+}) => {
+
     return (
         <div className="overflow-hidden rounded-2xl border border-[#E5E7EB] bg-white shadow-sm">
 
@@ -18,19 +22,15 @@ const EventTable = () => {
                             </th>
 
                             <th className="px-6 py-4 text-left text-sm font-semibold text-[#6B7280]">
-                                Endpoint
+                                Event Type
+                            </th>
+
+                            <th className="px-6 py-4 text-left text-sm font-semibold text-[#6B7280]">
+                                Customer ID
                             </th>
 
                             <th className="px-6 py-4 text-left text-sm font-semibold text-[#6B7280]">
                                 Status
-                            </th>
-
-                            <th className="px-6 py-4 text-left text-sm font-semibold text-[#6B7280]">
-                                Latency
-                            </th>
-
-                            <th className="px-6 py-4 text-left text-sm font-semibold text-[#6B7280]">
-                                Retries
                             </th>
 
                         </tr>
@@ -39,34 +39,66 @@ const EventTable = () => {
 
                     <tbody>
 
-                        {monitoringData.map((event) => (
-                            <tr
-                                key={event.id}
-                                className="border-b border-[#F1F5F9] hover:bg-[#FAFBFC] transition-colors"
-                            >
+                        <AnimatePresence initial={false}>
 
-                                <td className="px-6 py-4 text-sm font-semibold text-[#1F2937]">
-                                    {event.id}
-                                </td>
+                            {events.length > 0 ? (
 
-                                <td className="px-6 py-4 text-sm text-[#6B7280]">
-                                    {event.endpoint}
-                                </td>
+                                events.map((event) => (
 
-                                <td className="px-6 py-4">
-                                    <StatusPill status={event.status} />
-                                </td>
+                                    <motion.tr
+                                        key={event.event_id}
+                                        initial={{ opacity: 0, y: 6 }}
+                                        animate={{ opacity: 1, y: 0 }}
+                                        exit={{ opacity: 0, y: -6 }}
+                                        transition={{ duration: 0.25 }}
+                                        layout
+                                        onClick={() =>
+                                            onSelectEvent(event.event_id)
+                                        }
+                                        className="border-b border-[#F1F5F9] hover:bg-[#FAFBFC] transition-colors cursor-pointer"
+                                    >
 
-                                <td className="px-6 py-4 text-sm text-[#1F2937]">
-                                    {event.latency}
-                                </td>
+                                        <td className="px-6 py-4 text-sm font-semibold text-[#1F2937]">
+                                            {event.event_id}
+                                        </td>
 
-                                <td className="px-6 py-4 text-sm text-[#1F2937]">
-                                    {event.retries}
-                                </td>
+                                        <td className="px-6 py-4 text-sm text-[#6B7280]">
+                                            {event.event_type}
+                                        </td>
 
-                            </tr>
-                        ))}
+                                        <td className="px-6 py-4 text-sm text-[#6B7280]">
+                                            {event.customer_id}
+                                        </td>
+
+                                        <td className="px-6 py-4">
+                                            <StatusPill
+                                                status={
+                                                    event.delivery_state ||
+                                                    "success"
+                                                }
+                                            />
+                                        </td>
+
+                                    </motion.tr>
+
+                                ))
+
+                            ) : (
+
+                                <tr>
+
+                                    <td
+                                        colSpan={4}
+                                        className="px-6 py-10 text-center text-sm text-[#6B7280]"
+                                    >
+                                        No events available
+                                    </td>
+
+                                </tr>
+
+                            )}
+
+                        </AnimatePresence>
 
                     </tbody>
 

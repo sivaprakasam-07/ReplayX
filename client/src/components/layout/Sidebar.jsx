@@ -8,6 +8,7 @@ import {
 } from "lucide-react"
 
 import { NavLink } from "react-router-dom"
+import { motion } from "framer-motion"
 
 const navItems = [
     {
@@ -52,28 +53,35 @@ const Sidebar = () => {
                 </h1>
             </div>
 
-            <div className="flex-1 p-4 space-y-2">
-                {navItems.map((item) => {
-                    const Icon = item.icon
-
-                    return (
-                        <NavLink
-                            key={item.name}
-                            to={item.path}
-                            className={({ isActive }) =>
-                                `flex items-center gap-3 px-4 py-3 rounded-xl transition-all duration-200 ease-out ${isActive
-                                    ? "bg-[#EEF2FF] text-[#5B6CFF] shadow-sm"
-                                    : "text-[#6B7280] hover:bg-[#F8FAFC] hover:text-[#1F2937]"
-                                }`
-                            }
-                        >
-                            <Icon size={19} className="shrink-0" />
-                            <span className="font-medium tracking-tight text-[0.96rem]">
-                                {item.name}
-                            </span>
-                        </NavLink>
-                    )
-                })}
+            <div className="flex-1 p-4">
+                <motion.ul initial="hidden" animate="visible" className="space-y-2">
+                    {navItems.map((item, idx) => {
+                        const Icon = item.icon
+                        return (
+                            <motion.li
+                                key={item.name}
+                                className="list-none"
+                                initial={{ opacity: 0, x: -6 }}
+                                animate={{ opacity: 1, x: 0 }}
+                                transition={{ delay: idx * 0.04, duration: 0.28 }}
+                            >
+                                <NavLink
+                                    to={item.path}
+                                    className={({ isActive }) =>
+                                        "flex items-center gap-3 px-4 py-3 rounded-xl transition-all duration-200 ease-out " + (isActive
+                                            ? "bg-[#EEF2FF] text-[#5B6CFF] shadow-sm"
+                                            : "text-[#6B7280] hover:bg-[#F8FAFC] hover:text-[#1F2937]")
+                                    }
+                                >
+                                    <Icon size={19} className="shrink-0" />
+                                    <span className="font-medium tracking-tight text-[0.96rem]">
+                                        {item.name}
+                                    </span>
+                                </NavLink>
+                            </motion.li>
+                        )
+                    })}
+                </motion.ul>
             </div>
 
             <div className="p-4 border-t border-[#F3F4F6]">

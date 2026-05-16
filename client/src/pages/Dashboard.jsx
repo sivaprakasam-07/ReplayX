@@ -1,8 +1,36 @@
+import { useEffect, useState } from "react"
+import { motion } from "framer-motion"
 import MetricCard from "../components/cards/MetricCard"
 import DeliveryTrafficChart from "../components/charts/DeliveryTrafficChart"
 import LiveActivityTable from "../components/tables/LiveActivityTable"
 
 const Dashboard = () => {
+    const [loading, setLoading] = useState(true)
+    const [metrics, setMetrics] = useState({
+        totalEvents: "24.8K",
+        failed: 312,
+        safety: 94,
+        endpointsCount: 7,
+    })
+
+    useEffect(() => {
+        const t = setTimeout(() => setLoading(false), 700)
+
+        const id = setInterval(() => {
+            setMetrics((m) => ({
+                totalEvents: `${Math.max(0, parseInt(m.totalEvents.toString().replace(/[^0-9]/g, "")) + Math.round(Math.random() * 120 - 10))}`,
+                failed: Math.max(0, m.failed + Math.round(Math.random() * 6 - 3)),
+                safety: Math.max(70, Math.min(100, m.safety + Math.round(Math.random() * 3 - 1))),
+                endpointsCount: Math.max(0, m.endpointsCount + Math.round(Math.random() * 1)),
+            }))
+        }, 4200)
+
+        return () => {
+            clearTimeout(t)
+            clearInterval(id)
+        }
+    }, [])
+
     return (
         <div className="space-y-8">
 
@@ -16,37 +44,18 @@ const Dashboard = () => {
                 </p>
             </div>
 
-            <div className="grid grid-cols-1 gap-5 md:grid-cols-2 xl:grid-cols-4">
+            <motion.div className="grid grid-cols-1 gap-5 md:grid-cols-2 xl:grid-cols-4" initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.45 }}>
+                {
+                    /* Simulated metrics for demo */
+                }
+                <MetricCard title="Total Events" value={metrics?.totalEvents ?? "--"} change="+3.2%" status="positive" loading={loading} />
 
-                <MetricCard
-                    title="Total Events"
-                    value="24.8K"
-                    change="+12.5%"
-                    status="positive"
-                />
+                <MetricCard title="Failed Deliveries" value={metrics?.failed ?? "--"} change="-1.4%" status={metrics?.failed > 500 ? "negative" : "positive"} loading={loading} />
 
-                <MetricCard
-                    title="Failed Deliveries"
-                    value="312"
-                    change="-8.2%"
-                    status="positive"
-                />
+                <MetricCard title="Replay Safety" value={`${metrics?.safety ?? "--"}%`} change="0.2%" status="positive" loading={loading} />
 
-                <MetricCard
-                    title="Replay Safety"
-                    value="94%"
-                    change="+4.1%"
-                    status="positive"
-                />
-
-                <MetricCard
-                    title="Critical Endpoints"
-                    value="7"
-                    change="+2.3%"
-                    status="negative"
-                />
-
-            </div>
+                <MetricCard title="Critical Endpoints" value={metrics?.endpointsCount ?? "--"} change="+2.3%" status="negative" loading={loading} />
+            </motion.div>
 
             <div className="grid grid-cols-1 gap-6 xl:grid-cols-3">
 
