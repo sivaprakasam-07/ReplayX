@@ -1,1 +1,8 @@
-export { }
+export const routes = {
+    dashboard: "/",
+    monitoring: "/monitoring",
+    retries: "/retries",
+    replay: "/replay",
+    endpoints: "/endpoints",
+    simulator: "/simulator",
+}
