@@ -1,5 +1,6 @@
 import api from "./axios"
 
+// Shared lightweight mock fallback used when backend is unavailable
 const mockEvents = [
     {
         event: {
@@ -36,12 +37,15 @@ const mockEvents = [
     },
 ]
 
-export const getEvents = async (limit = 20, skip = 0) => {
+export const getEvents = async (limit = 50, skip = 0) => {
     try {
         const response = await api.get(`/events?limit=${limit}&skip=${skip}`)
         return response.data
-    } catch {
-        return mockEvents
+    } catch (error) {
+        console.error("Failed to fetch events, returning fallback mock:", error)
+
+        // Normalize fallback to the same shape monitoring expects (array of events)
+        return mockEvents.map((m) => m.event)
     }
 }
 
@@ -49,9 +53,27 @@ export const getEventById = async (eventId) => {
     try {
         const response = await api.get(`/events/${eventId}`)
         return response.data
-    } catch {
-        return (
-            mockEvents.find((item) => item.event.event_id === eventId) ?? mockEvents[0]
-        )
+    } catch (error) {
+        console.error("Failed to fetch event details, returning fallback:", error)
+
+        const found = mockEvents.find((item) => item.event.event_id === eventId)
+        return (found && found.event) || mockEvents[0].event
+    }
+}
+
+export const getEventIntelligence = async (eventId) => {
+    try {
+        const response = await api.get(`/intelligence/analyze/${eventId}`)
+        return response.data
+    } catch (error) {
+        console.error("Failed to fetch event intelligence, returning fallback:", error)
+
+        return {
+            delivery_state: "Delivered with retry",
+            failure_reason: "Transient timeout during initial attempt",
+            recommended_action: "Replay safely",
+            safe_to_replay: true,
+            risk_score: 18,
+        }
     }
 }

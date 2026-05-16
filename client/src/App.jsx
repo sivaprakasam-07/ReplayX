@@ -10,6 +10,7 @@ import Simulator from "./pages/Simulator"
 import DashboardLayout from "./components/layout/DashboardLayout"
 
 const App = () => {
+  console.log(import.meta.env.VITE_API_BASE_URL)
   return (
     <BrowserRouter>
       <DashboardLayout>

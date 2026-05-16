@@ -4,8 +4,11 @@ import MetricCard from "../components/cards/MetricCard"
 import EventTable from "../components/tables/EventTable"
 import EventModal from "../components/common/EventModal"
 
-import { getEvents, getEventById } from "../services/api/eventsApi"
-import { analyzeEvent } from "../services/api/intelligenceApi"
+import {
+    getEvents,
+    getEventById,
+    getEventIntelligence,
+} from "../services/api/monitoringApi"
 
 const Monitoring = () => {
 
@@ -28,6 +31,11 @@ const Monitoring = () => {
 
                 const data = await getEvents()
 
+                console.log(
+                    "Events Data:",
+                    data
+                )
+
                 setEvents(data)
 
             } catch (err) {
@@ -41,11 +49,58 @@ const Monitoring = () => {
             } finally {
 
                 setLoading(false)
-
             }
         }
 
         fetchEvents()
+
+        const wsUrl = import.meta.env.VITE_WS_URL || "ws://127.0.0.1:8000/ws/events"
+
+        const socket = new WebSocket(wsUrl)
+
+        socket.onopen = () => {
+
+            console.log(
+                "WebSocket Connected"
+            )
+        }
+
+        socket.onmessage = (event) => {
+
+            const newEvent = JSON.parse(
+                event.data
+            )
+
+            console.log(
+                "Realtime Event:",
+                newEvent
+            )
+
+            setEvents((prev) => [
+                newEvent,
+                ...prev,
+            ])
+        }
+
+        socket.onerror = (error) => {
+
+            console.error(
+                "WebSocket Error:",
+                error
+            )
+        }
+
+        socket.onclose = () => {
+
+            console.log(
+                "WebSocket Disconnected"
+            )
+        }
+
+        return () => {
+
+            socket.close()
+        }
 
     }, [])
 
@@ -59,11 +114,17 @@ const Monitoring = () => {
                 await getEventById(eventId)
 
             const intelligence =
-                await analyzeEvent(eventId)
+                await getEventIntelligence(
+                    eventId
+                )
 
-            setSelectedEvent(eventDetails)
+            setSelectedEvent(
+                eventDetails
+            )
 
-            setAnalysis(intelligence)
+            setAnalysis(
+                intelligence
+            )
 
             setModalOpen(true)
 
@@ -85,7 +146,9 @@ const Monitoring = () => {
                 </h1>
 
                 <p className="text-[#6B7280] mt-2">
-                    Monitor live webhook events, delivery states, retries, and endpoint performance.
+                    Monitor live webhook events,
+                    delivery states, retries,
+                    and endpoint performance.
                 </p>
             </div>
 
@@ -93,7 +156,9 @@ const Monitoring = () => {
 
                 <MetricCard
                     title="Active Deliveries"
-                    value="1,248"
+                    value={
+                        events.length || "0"
+                    }
                     change="+8.2%"
                     status="positive"
                 />
@@ -136,11 +201,13 @@ const Monitoring = () => {
                     </div>
 
                     <div className="flex items-center gap-2">
+
                         <div className="w-2.5 h-2.5 rounded-full bg-green-500 animate-pulse"></div>
 
                         <span className="text-sm font-semibold text-green-600">
                             Live
                         </span>
+
                     </div>
 
                 </div>
