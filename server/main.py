@@ -1,6 +1,6 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from routers import events, intelligence
+from routers import events, intelligence, dashboard, simulator, websockets
 
 app = FastAPI(
     title="Webhook Delivery Reliability Intelligence API",
@@ -20,6 +20,9 @@ app.add_middleware(
 # Include Routers
 app.include_router(events.router)
 app.include_router(intelligence.router)
+app.include_router(dashboard.router)
+app.include_router(simulator.router)
+app.include_router(websockets.router)
 
 @app.get("/")
 async def root():

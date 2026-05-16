@@ -1,6 +1,5 @@
 from pydantic import BaseModel, Field
-from typing import List, Optional
-from datetime import datetime
+from typing import List, Optional, Any, Dict
 
 class WebhookEvent(BaseModel):
     event_id: str
@@ -11,6 +10,12 @@ class WebhookEvent(BaseModel):
     payload_size_kb: float
     idempotency_key: str
     priority: str
+
+class PaginatedEventsResponse(BaseModel):
+    total: int
+    limit: int
+    skip: int
+    events: List[WebhookEvent]
 
 class DeliveryAttempt(BaseModel):
     attempt_id: str
@@ -44,8 +49,49 @@ class ReplayAction(BaseModel):
 
 class AnalysisResponse(BaseModel):
     event_id: str
-    delivery_state: str # delivered, retrying, failed, expired, duplicate, recovered, unsafe_to_replay
-    failure_reason: str # none, customer_endpoint_down, invalid_signature, etc.
+    delivery_state: str # success, failed, retry, warning, duplicate, recovered, blocked, critical
+    failure_reason: str
     safe_to_replay: bool
     recommended_action: str
     risk_score: float = Field(description="ML predicted risk of failure or duplicate delivery")
+
+class CombinedIntelligenceResponse(BaseModel):
+    event: WebhookEvent
+    delivery_history: List[DeliveryAttempt]
+    analysis: AnalysisResponse
+
+class DashboardMetrics(BaseModel):
+    total_events: int
+    failed_deliveries: int
+    retry_success_rate: float
+    safe_replays: int
+    critical_endpoints: int
+    avg_latency_ms: float
+
+class RetryTimelineItem(BaseModel):
+    time: str
+    retries: int
+    recovered: int
+
+class RetrySummary(BaseModel):
+    total_retries: int
+    recovery_rate: float
+    failed_retries: int
+
+class RetryAnalyticsResponse(BaseModel):
+    timeline: List[RetryTimelineItem]
+    summary: RetrySummary
+
+class ReplayRecommendation(BaseModel):
+    event_id: str
+    safe_to_replay: bool
+    risk_level: str
+    reason: str
+    recommended_action: str
+
+class EndpointHealth(BaseModel):
+    endpoint: str
+    health: str
+    uptime: float
+    risk_score: float
+    avg_latency: float
