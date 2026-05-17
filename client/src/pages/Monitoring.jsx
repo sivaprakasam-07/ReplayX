@@ -9,6 +9,7 @@ import {
     getEventById,
     getEventIntelligence,
 } from "../services/api/monitoringApi"
+import api from "../services/api/axios"
 
 const Monitoring = () => {
 
@@ -20,6 +21,19 @@ const Monitoring = () => {
     const [analysis, setAnalysis] = useState(null)
 
     const [modalOpen, setModalOpen] = useState(false)
+    const [metrics, setMetrics] = useState(null)
+
+    useEffect(() => {
+        const fetchMetrics = async () => {
+            try {
+                const response = await api.get('/dashboard/metrics');
+                setMetrics(response.data);
+            } catch (error) {
+                console.error("Failed to fetch metrics", error);
+            }
+        };
+        fetchMetrics();
+    }, []);
 
     useEffect(() => {
 
@@ -192,31 +206,29 @@ const Monitoring = () => {
             <div className="grid grid-cols-1 gap-5 md:grid-cols-2 xl:grid-cols-4">
 
                 <MetricCard
-                    title="Active Deliveries"
-                    value={
-                        events.length || "0"
-                    }
+                    title="Safe Replays"
+                    value={metrics?.safe_replays ?? "--"}
                     change="+8.2%"
                     status="positive"
                 />
 
                 <MetricCard
                     title="Failed Requests"
-                    value="84"
+                    value={metrics?.failed_deliveries ?? "--"}
                     change="-4.1%"
                     status="positive"
                 />
 
                 <MetricCard
                     title="Avg Latency"
-                    value="214ms"
+                    value={metrics?.avg_latency_ms ? `${metrics.avg_latency_ms}ms` : "--"}
                     change="-1.8%"
                     status="positive"
                 />
 
                 <MetricCard
-                    title="Retry Queue"
-                    value="19"
+                    title="Total Events"
+                    value={metrics?.total_events ?? "--"}
                     change="+2.4%"
                     status="negative"
                 />

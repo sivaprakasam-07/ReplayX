@@ -10,6 +10,7 @@ class WebhookEvent(BaseModel):
     payload_size_kb: float
     idempotency_key: str
     priority: str
+    delivery_state: Optional[str] = None
 
 class PaginatedEventsResponse(BaseModel):
     total: int

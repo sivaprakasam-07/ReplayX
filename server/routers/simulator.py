@@ -44,6 +44,12 @@ async def simulate_event(status_type: str):
     if attempts:
         await db.delivery_attempts.insert_many(attempts)
         
+    # Determine delivery state for the frontend
+    if status_type in ["failure", "replay"]:
+        event["delivery_state"] = "failed"
+    else:
+        event["delivery_state"] = "success"
+        
     # Broadcast the live event to all connected dashboard clients
     await manager.broadcast({
         "type": "NEW_SIMULATION",

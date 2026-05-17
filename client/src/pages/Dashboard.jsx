@@ -3,6 +3,7 @@ import { motion } from "framer-motion"
 import MetricCard from "../components/cards/MetricCard"
 import DeliveryTrafficChart from "../components/charts/DeliveryTrafficChart"
 import LiveActivityTable from "../components/tables/LiveActivityTable"
+import api from "../services/api/axios"
 
 const Dashboard = () => {
     const [loading, setLoading] = useState(true)
@@ -14,21 +15,22 @@ const Dashboard = () => {
     })
 
     useEffect(() => {
-        const t = setTimeout(() => setLoading(false), 700)
-
-        const id = setInterval(() => {
-            setMetrics((m) => ({
-                totalEvents: `${Math.max(0, parseInt(m.totalEvents.toString().replace(/[^0-9]/g, "")) + Math.round(Math.random() * 120 - 10))}`,
-                failed: Math.max(0, m.failed + Math.round(Math.random() * 6 - 3)),
-                safety: Math.max(70, Math.min(100, m.safety + Math.round(Math.random() * 3 - 1))),
-                endpointsCount: Math.max(0, m.endpointsCount + Math.round(Math.random() * 1)),
-            }))
-        }, 4200)
-
-        return () => {
-            clearTimeout(t)
-            clearInterval(id)
-        }
+        const fetchMetrics = async () => {
+            try {
+                const response = await api.get('/dashboard/metrics');
+                setMetrics({
+                    totalEvents: response.data.total_events,
+                    failed: response.data.failed_deliveries,
+                    safety: response.data.retry_success_rate,
+                    endpointsCount: response.data.critical_endpoints,
+                });
+            } catch (error) {
+                console.error("Failed to fetch dashboard metrics", error);
+            } finally {
+                setLoading(false);
+            }
+        };
+        fetchMetrics();
     }, [])
 
     return (

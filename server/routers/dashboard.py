@@ -36,13 +36,34 @@ async def get_dashboard_metrics():
 async def get_retry_analytics():
     db = get_db()
     
-    timeline = [
-        {"time": "08:00", "retries": 120, "recovered": 85},
-        {"time": "09:00", "retries": 150, "recovered": 110},
-        {"time": "10:00", "retries": 90, "recovered": 70},
-        {"time": "11:00", "retries": 210, "recovered": 160},
-        {"time": "12:00", "retries": 180, "recovered": 140},
+    # Dynamic MongoDB Aggregation for Timeline
+    # We group delivery attempts by the hour (extracting from 'attempted_at' e.g. "2023-10-24T08:15:00Z")
+    pipeline = [
+        {"$match": {"attempt_number": {"$gt": 1}}},
+        {"$group": {
+            "_id": {"$substr": ["$attempted_at", 11, 2]},
+            "retries": {"$sum": 1},
+            "recovered": {
+                "$sum": {"$cond": [{"$lt": ["$http_status", 400]}, 1, 0]}
+            }
+        }},
+        {"$sort": {"_id": 1}}
     ]
+    cursor = db.delivery_attempts.aggregate(pipeline)
+    results = await cursor.to_list(length=24)
+    
+    timeline = []
+    for r in results:
+        if not r["_id"]:
+            continue
+        timeline.append({
+            "time": f"{r['_id']}:00",
+            "retries": r["retries"],
+            "recovered": r["recovered"]
+        })
+        
+    if not timeline:
+        timeline = [{"time": "00:00", "retries": 0, "recovered": 0}]
     
     total_retries = await db.delivery_attempts.count_documents({"attempt_number": {"$gt": 1}})
     successful_retries = await db.delivery_attempts.count_documents({"attempt_number": {"$gt": 1}, "http_status": {"$lt": 400}})
@@ -64,9 +85,13 @@ async def get_endpoints_health():
     
     health_data = []
     for ep in endpoints:
+        health_status = "critical"
+        if ep["active"]:
+            health_status = "warning" if ep.get("avg_success_rate", 0) < 0.85 else "healthy"
+            
         health_data.append(EndpointHealth(
             endpoint=ep["endpoint_url_type"],
-            health="healthy" if ep["active"] else "critical",
+            health=health_status,
             uptime=ep["avg_success_rate"] * 100,
             risk_score=0.15 if ep["active"] else 0.85,
             avg_latency=120.5
