@@ -1,5 +1,6 @@
 from pydantic import BaseModel, Field
 from typing import List, Optional, Any, Dict
+from datetime import datetime
 
 class WebhookEvent(BaseModel):
     event_id: str
@@ -48,13 +49,26 @@ class ReplayAction(BaseModel):
     duplicate_detected: bool
     manually_triggered: bool
 
+class FailurePattern(BaseModel):
+    pattern: str
+    severity: str
+
+class MLPredictions(BaseModel):
+    retry_success_probability: int = Field(default=50, description="0-100")
+    predicted_recovery_time: str = Field(default="30s")
+    risk_level: str = Field(default="medium")
+    forecast: str = Field(default="degraded")
+    ai_confidence: int = Field(default=50, description="0-100")
+
 class AnalysisResponse(BaseModel):
     event_id: str
-    delivery_state: str # success, failed, retry, warning, duplicate, recovered, blocked, critical
+    delivery_state: str
     failure_reason: str
     safe_to_replay: bool
     recommended_action: str
-    risk_score: float = Field(description="ML predicted risk of failure or duplicate delivery")
+    risk_score: float = Field(default=0.5, description="ML predicted risk (0.0-1.0)")
+    ml_predictions: Optional[MLPredictions] = None
+    failure_patterns: List[FailurePattern] = Field(default_factory=list)
 
 class CombinedIntelligenceResponse(BaseModel):
     event: WebhookEvent
@@ -83,6 +97,13 @@ class RetryAnalyticsResponse(BaseModel):
     timeline: List[RetryTimelineItem]
     summary: RetrySummary
 
+class EnrichedRetryAnalyticsResponse(BaseModel):
+    timeline: List[RetryTimelineItem]
+    summary: RetrySummary
+    ml_predictions: Dict[str, Any] = {}
+    failure_patterns: List[FailurePattern] = []
+    retry_events: List[Dict[str, Any]] = []
+
 class ReplayRecommendation(BaseModel):
     event_id: str
     safe_to_replay: bool
@@ -90,9 +111,46 @@ class ReplayRecommendation(BaseModel):
     reason: str
     recommended_action: str
 
+class EnrichedReplayRecommendation(BaseModel):
+    event_id: str
+    safe_to_replay: bool
+    risk_level: str
+    reason: str
+    recommended_action: str
+    risk_score: float = 0.0
+    ml_confidence: int = 0
+    failure_patterns: List[FailurePattern] = []
+
 class EndpointHealth(BaseModel):
     endpoint: str
     health: str
     uptime: float
     risk_score: float
     avg_latency: float
+
+
+class TriggerResponse(BaseModel):
+    status: str
+    operation_id: str
+    event_id: str
+    operation_type: str
+    scheduled_at: str
+
+
+class OperationStatus(BaseModel):
+    operation_id: str
+    event_id: str
+    operation_type: str
+    status: str
+    attempt_number: int
+    scheduled_at: str
+    next_retry_at: Optional[str] = ""
+    result: Any = None
+    created_at: str
+    updated_at: str
+
+
+class ScheduleResponse(BaseModel):
+    status: str
+    operations: list = []
+    reason: str = ""

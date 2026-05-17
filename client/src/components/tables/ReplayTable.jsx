@@ -31,6 +31,10 @@ const ReplayTable = ({ replays }) => {
                             Recommended Action
                         </th>
 
+                        <th className="px-6 py-4 text-left text-sm font-semibold text-[#6B7280]">
+                            ML Confidence
+                        </th>
+
                     </tr>
 
                 </thead>
@@ -68,6 +72,22 @@ const ReplayTable = ({ replays }) => {
 
                             <td className="px-6 py-4 text-sm font-medium text-[#1F2937]">
                                 {replay.recommended_action}
+                            </td>
+
+                            <td className="px-6 py-4">
+                                {replay.ml_confidence != null ? (
+                                    <span className={`inline-flex items-center px-3 py-1 rounded-full text-xs font-semibold ${
+                                        replay.ml_confidence > 80
+                                            ? "bg-[#DCFCE7] text-[#15803D]"
+                                            : replay.ml_confidence > 60
+                                                ? "bg-[#FEF3C7] text-[#D97706]"
+                                                : "bg-[#FEE2E2] text-[#DC2626]"
+                                    }`}>
+                                        {replay.ml_confidence}%
+                                    </span>
+                                ) : (
+                                    <span className="text-sm text-[#9CA3AF]">--</span>
+                                )}
                             </td>
 
                         </tr>

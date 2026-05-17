@@ -6,17 +6,22 @@ import {
     YAxis,
     Tooltip,
     CartesianGrid,
+    Legend,
 } from "recharts"
 
 import { retryData } from "../../data/retryData"
 
-const RetryTimelineChart = () => {
+const RetryTimelineChart = ({ data, predictedData }) => {
+    const chartData = data || retryData
+
+    const hasPredicted = predictedData || chartData.some(d => d.predicted_retries != null)
+
     return (
         <div className="h-[340px] w-full">
 
             <ResponsiveContainer width="100%" height="100%">
 
-                <LineChart data={retryData}>
+                <LineChart data={chartData}>
 
                     <CartesianGrid
                         strokeDasharray="3 3"
@@ -45,12 +50,15 @@ const RetryTimelineChart = () => {
 
                     <Tooltip />
 
+                    {hasPredicted && <Legend />}
+
                     <Line
                         type="monotone"
                         dataKey="retries"
                         stroke="#5B6CFF"
                         strokeWidth={3}
                         dot={false}
+                        name="Actual Retries"
                     />
 
                     <Line
@@ -59,7 +67,31 @@ const RetryTimelineChart = () => {
                         stroke="#8FAF9F"
                         strokeWidth={3}
                         dot={false}
+                        name="Recovered"
                     />
+
+                    {hasPredicted && (
+                        <>
+                            <Line
+                                type="monotone"
+                                dataKey="predicted_retries"
+                                stroke="#5B6CFF"
+                                strokeWidth={2}
+                                strokeDasharray="6 4"
+                                dot={false}
+                                name="Predicted Retries"
+                            />
+                            <Line
+                                type="monotone"
+                                dataKey="predicted_recovered"
+                                stroke="#8FAF9F"
+                                strokeWidth={2}
+                                strokeDasharray="6 4"
+                                dot={false}
+                                name="Predicted Recovered"
+                            />
+                        </>
+                    )}
 
                 </LineChart>
 

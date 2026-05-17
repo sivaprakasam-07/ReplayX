@@ -11,10 +11,30 @@ venv.bak/
 __pycache__/
 *.py[cod]
 *$py.class
+*.egg-info/
+dist/
+build/
+*.egg
 
 # IDEs
 .idea/
 .vscode/
 
-# Ignore large datasets since they are generated
+# Node
+node_modules/
+client/node_modules/
+client/dist/
+
+# ML Models (old pickle format - use .joblib instead)
+*.pkl
+
+# Datasets
 datasets/*.csv
+server/ml/data/*.csv
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Reports
+REPLAYX_ML_EXECUTION_DELIVERY_REPORT.md

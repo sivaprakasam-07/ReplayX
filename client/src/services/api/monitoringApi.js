@@ -5,8 +5,10 @@ const mockEvents = [
     {
         event: {
             event_id: "EVT-1024",
-            event_type: "payment.webhook",
+            event_type: "invoice.created",
             customer_id: "CUST-1001",
+            delivery_state: "delivered",
+            risk_score: 0.15,
         },
         delivery_history: [
             {
@@ -19,8 +21,10 @@ const mockEvents = [
     {
         event: {
             event_id: "EVT-1025",
-            event_type: "order.updated",
+            event_type: "payment.failed",
             customer_id: "CUST-1044",
+            delivery_state: "recovered",
+            risk_score: 0.55,
         },
         delivery_history: [
             {
@@ -30,8 +34,29 @@ const mockEvents = [
             },
             {
                 attempt_number: 2,
-                delivery_status: "retry",
-                failure_reason: "Retry scheduled by policy",
+                delivery_status: "success",
+                failure_reason: null,
+            },
+        ],
+    },
+    {
+        event: {
+            event_id: "EVT-1026",
+            event_type: "compliance.failed",
+            customer_id: "CUST-1077",
+            delivery_state: "failed",
+            risk_score: 0.88,
+        },
+        delivery_history: [
+            {
+                attempt_number: 1,
+                delivery_status: "failed",
+                failure_reason: "Invalid signature",
+            },
+            {
+                attempt_number: 2,
+                delivery_status: "failed",
+                failure_reason: "Rate limited",
             },
         ],
     },
@@ -69,11 +94,21 @@ export const getEventIntelligence = async (eventId) => {
         console.error("Failed to fetch event intelligence, returning fallback:", error)
 
         return {
-            delivery_state: "Delivered with retry",
+            delivery_state: "recovered",
             failure_reason: "Transient timeout during initial attempt",
             recommended_action: "Replay safely",
             safe_to_replay: true,
-            risk_score: 18,
+            risk_score: 0.35,
+            ml_predictions: {
+                retry_success_probability: 72,
+                predicted_recovery_time: "45s",
+                risk_level: "medium",
+                forecast: "degraded",
+                ai_confidence: 84,
+            },
+            failure_patterns: [
+                { pattern: "timeout_spike", severity: "medium" }
+            ],
         }
     }
 }

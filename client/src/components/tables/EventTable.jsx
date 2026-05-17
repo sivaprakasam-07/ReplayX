@@ -29,6 +29,10 @@ const EventTable = ({ events = [], onSelectEvent }) => {
                                 Status
                             </th>
 
+                            <th className="px-6 py-4 text-left text-sm font-semibold text-[#6B7280]">
+                                Risk Score
+                            </th>
+
                         </tr>
 
                     </thead>
@@ -81,6 +85,22 @@ const EventTable = ({ events = [], onSelectEvent }) => {
                                             />
                                         </td>
 
+                                        <td className="px-6 py-4">
+                                            {event.risk_score != null ? (
+                                                <span className={`inline-flex items-center px-3 py-1 rounded-full text-xs font-semibold ${
+                                                    event.risk_score > 0.7
+                                                        ? "bg-[#FEE2E2] text-[#DC2626]"
+                                                        : event.risk_score > 0.3
+                                                            ? "bg-[#FEF3C7] text-[#D97706]"
+                                                            : "bg-[#DCFCE7] text-[#15803D]"
+                                                }`}>
+                                                    {(event.risk_score * 100).toFixed(0)}
+                                                </span>
+                                            ) : (
+                                                <span className="text-sm text-[#9CA3AF]">--</span>
+                                            )}
+                                        </td>
+
                                     </motion.tr>
 
                                 ))
@@ -90,7 +110,7 @@ const EventTable = ({ events = [], onSelectEvent }) => {
                                 <tr>
 
                                     <td
-                                        colSpan={4}
+                                        colSpan={5}
                                         className="px-6 py-10 text-center text-sm text-[#6B7280]"
                                     >
                                         No events available

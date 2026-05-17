@@ -200,6 +200,76 @@ const EventModal = ({
 
                         </div>
 
+                        {analysis?.ml_predictions && (
+                            <div className="bg-[#F8FAFC] rounded-2xl border border-[#E5E7EB] p-6">
+                                <h3 className="text-lg font-bold text-[#1F2937] mb-4">
+                                    ML Predictions
+                                </h3>
+                                <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+                                    <div className="bg-white rounded-xl border border-[#E5E7EB] p-4">
+                                        <p className="text-xs text-[#6B7280] mb-1">Success Probability</p>
+                                        <div className="flex items-center gap-2">
+                                            <div className="flex-1 h-2 bg-[#E5E7EB] rounded-full overflow-hidden">
+                                                <div className="h-full rounded-full transition-all duration-500"
+                                                    style={{
+                                                        width: `${analysis.ml_predictions.retry_success_probability}%`,
+                                                        backgroundColor: analysis.ml_predictions.retry_success_probability > 60
+                                                            ? "#15803D" : analysis.ml_predictions.retry_success_probability > 30
+                                                                ? "#D97706" : "#DC2626"
+                                                    }}
+                                                />
+                                            </div>
+                                            <span className="text-sm font-bold text-[#1F2937]">
+                                                {analysis.ml_predictions.retry_success_probability}%
+                                            </span>
+                                        </div>
+                                    </div>
+                                    <div className="bg-white rounded-xl border border-[#E5E7EB] p-4">
+                                        <p className="text-xs text-[#6B7280] mb-1">Risk Level</p>
+                                        <p className="text-sm font-bold text-[#1F2937] capitalize">
+                                            {analysis.ml_predictions.risk_level}
+                                        </p>
+                                    </div>
+                                    <div className="bg-white rounded-xl border border-[#E5E7EB] p-4">
+                                        <p className="text-xs text-[#6B7280] mb-1">Forecast</p>
+                                        <p className="text-sm font-bold text-[#1F2937] capitalize">
+                                            {analysis.ml_predictions.forecast}
+                                        </p>
+                                    </div>
+                                    <div className="bg-white rounded-xl border border-[#E5E7EB] p-4">
+                                        <p className="text-xs text-[#6B7280] mb-1">AI Confidence</p>
+                                        <p className="text-sm font-bold text-[#1F2937]">
+                                            {analysis.ml_predictions.ai_confidence}%
+                                        </p>
+                                    </div>
+                                    <div className="bg-white rounded-xl border border-[#E5E7EB] p-4">
+                                        <p className="text-xs text-[#6B7280] mb-1">Recovery Time</p>
+                                        <p className="text-sm font-bold text-[#1F2937]">
+                                            {analysis.ml_predictions.predicted_recovery_time}
+                                        </p>
+                                    </div>
+                                </div>
+                                {analysis.failure_patterns?.length > 0 && (
+                                    <div className="mt-4">
+                                        <p className="text-xs text-[#6B7280] mb-2">Detected Patterns</p>
+                                        <div className="flex flex-wrap gap-2">
+                                            {analysis.failure_patterns.map((fp, i) => (
+                                                <span key={i} className={`inline-flex items-center px-3 py-1 rounded-full text-xs font-semibold ${
+                                                    fp.severity === "high"
+                                                        ? "bg-[#FEE2E2] text-[#DC2626]"
+                                                        : fp.severity === "medium"
+                                                            ? "bg-[#FEF3C7] text-[#D97706]"
+                                                            : "bg-[#DCFCE7] text-[#15803D]"
+                                                }`}>
+                                                    {fp.pattern}
+                                                </span>
+                                            ))}
+                                        </div>
+                                    </div>
+                                )}
+                            </div>
+                        )}
+
                         <div className="bg-[#F8FAFC] rounded-2xl border border-[#E5E7EB] p-6">
 
                             <h3 className="text-lg font-bold text-[#1F2937] mb-5">
