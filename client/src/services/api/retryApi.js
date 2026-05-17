@@ -61,6 +61,16 @@ export const processPendingOperations = async () => {
     }
 }
 
+export const getOperationHistory = async (eventId) => {
+    try {
+        const response = await api.get(`/operations/history/${eventId}`)
+        return response.data
+    } catch (error) {
+        console.error("Failed to fetch operation history:", error)
+        return { event_id: eventId, current_delivery_state: null, operations: [], state_transitions: [] }
+    }
+}
+
 export const scheduleAuto = async (eventId) => {
     try {
         const response = await api.post(`/operations/schedule/${eventId}`)

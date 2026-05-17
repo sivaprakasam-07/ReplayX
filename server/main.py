@@ -4,13 +4,14 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from routers import events, intelligence, dashboard, simulator, websockets, operations
-from scheduler import worker_loop
+from scheduler import worker_loop, reset_stuck_operations
 
 logging.basicConfig(level=logging.INFO)
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    await reset_stuck_operations()
     worker_task = asyncio.create_task(worker_loop())
     yield
     worker_task.cancel()

@@ -8,6 +8,7 @@ from typing import Dict, Any, Optional, List
 from database import get_db
 from services.ml_integration import ml_scorer
 from services.retry_intelligence import intelligence_engine
+from services.websocket_manager import manager
 
 SIMULATE_DELIVERY = True
 
@@ -48,12 +49,44 @@ async def get_event(event_id: str) -> Optional[Dict[str, Any]]:
     return doc
 
 
-async def update_event_state(event_id: str, delivery_state: str):
+async def record_state_transition(event_id: str, from_state: Optional[str], to_state: str, reason: str = ""):
     db = get_db()
+    transition = {
+        "transition_id": f"TR_{uuid.uuid4().hex[:12].upper()}",
+        "event_id": event_id,
+        "from_state": from_state or "unknown",
+        "to_state": to_state,
+        "reason": reason,
+        "timestamp": datetime.utcnow().isoformat() + "Z",
+    }
+    await db.state_transitions.insert_one(transition.copy())
+    await manager.broadcast({
+        "type": "STATE_TRANSITION",
+        "data": transition,
+    })
+
+
+async def update_event_state(event_id: str, delivery_state: str, reason: str = ""):
+    db = get_db()
+    event = await db.events.find_one({"event_id": event_id})
+    old_state = event.get("delivery_state") if event else None
     await db.events.update_one(
         {"event_id": event_id},
         {"$set": {"delivery_state": delivery_state}}
     )
+    await record_state_transition(event_id, old_state, delivery_state, reason)
+
+
+async def check_idempotency(event: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+    idempotency_key = event.get("idempotency_key")
+    if not idempotency_key:
+        return None
+    db = get_db()
+    existing = await db.delivery_attempts.find_one({
+        "idempotency_key": idempotency_key,
+        "http_status": {"$lt": 400},
+    })
+    return existing
 
 
 async def record_attempt(
@@ -65,6 +98,7 @@ async def record_attempt(
     response_time_ms: int,
     timeout: bool = False,
     signature_valid: bool = True,
+    idempotency_key: str = "",
 ) -> Dict[str, Any]:
     db = get_db()
     attempt = {
@@ -79,6 +113,7 @@ async def record_attempt(
         "timeout": timeout,
         "signature_valid": signature_valid,
         "retry_scheduled": False,
+        "idempotency_key": idempotency_key,
     }
     await db.delivery_attempts.insert_one(attempt.copy())
     return attempt
@@ -214,6 +249,20 @@ def categorize_result(http_status: int, response_body_category: str) -> str:
     return "server_error"
 
 
+async def broadcast_op_update(op_data: Dict[str, Any]):
+    await manager.broadcast({
+        "type": "OPERATION_UPDATE",
+        "data": {
+            "operation_id": op_data["operation_id"],
+            "event_id": op_data["event_id"],
+            "operation_type": op_data.get("operation_type"),
+            "status": op_data.get("status"),
+            "attempt_number": op_data.get("attempt_number"),
+            "result": op_data.get("result"),
+        },
+    })
+
+
 async def process_operation(operation: Dict[str, Any]) -> Dict[str, Any]:
     db = get_db()
     op_id = operation["operation_id"]
@@ -225,6 +274,8 @@ async def process_operation(operation: Dict[str, Any]) -> Dict[str, Any]:
         {"operation_id": op_id},
         {"$set": {"status": "in_progress", "updated_at": datetime.utcnow().isoformat() + "Z"}}
     )
+    operation["status"] = "in_progress"
+    await broadcast_op_update(operation)
 
     event = await get_event(event_id)
     if not event:
@@ -232,7 +283,28 @@ async def process_operation(operation: Dict[str, Any]) -> Dict[str, Any]:
             {"operation_id": op_id},
             {"$set": {"status": "failed", "result": {"error": "event_not_found"}}}
         )
+        operation["status"] = "failed"
+        await broadcast_op_update(operation)
         return {"status": "failed", "error": "event_not_found"}
+
+    dup = await check_idempotency(event)
+    if dup:
+        await db.operations.update_one(
+            {"operation_id": op_id},
+            {"$set": {
+                "status": "completed",
+                "result": {
+                    "status": "duplicate",
+                    "message": "Event already delivered (idempotency_key matched)",
+                    "existing_attempt_id": dup["attempt_id"],
+                },
+                "updated_at": datetime.utcnow().isoformat() + "Z",
+            }}
+        )
+        operation["status"] = "completed"
+        await broadcast_op_update(operation)
+        await update_event_state(event_id, "duplicate", "idempotency_key_match")
+        return {"status": "completed", "delivery_state": "duplicate"}
 
     attempts_list = await get_attempts(event_id)
     endpoint_id = operation.get("endpoint_id") or (
@@ -245,7 +317,9 @@ async def process_operation(operation: Dict[str, Any]) -> Dict[str, Any]:
             {"operation_id": op_id},
             {"$set": {"status": "failed", "result": {"error": "endpoint_inactive"}}}
         )
-        await update_event_state(event_id, "unsafe_to_replay")
+        operation["status"] = "failed"
+        await broadcast_op_update(operation)
+        await update_event_state(event_id, "unsafe_to_replay", "endpoint_inactive")
         return {"status": "failed", "error": "endpoint_inactive"}
 
     ml_result = ml_scorer.get_full_prediction(event, attempts_list, endpoint)
@@ -269,6 +343,7 @@ async def process_operation(operation: Dict[str, Any]) -> Dict[str, Any]:
         response_body_category=category,
         response_time_ms=response_time,
         timeout=is_timeout,
+        idempotency_key=event.get("idempotency_key", ""),
     )
 
     result_category = categorize_result(http_status, category)
@@ -283,7 +358,7 @@ async def process_operation(operation: Dict[str, Any]) -> Dict[str, Any]:
         else:
             new_state = "recovered"
 
-        await update_event_state(event_id, new_state)
+        await update_event_state(event_id, new_state, "delivery_success")
 
         await db.operations.update_one(
             {"operation_id": op_id},
@@ -298,6 +373,8 @@ async def process_operation(operation: Dict[str, Any]) -> Dict[str, Any]:
                 "updated_at": datetime.utcnow().isoformat() + "Z",
             }}
         )
+        operation["status"] = "completed"
+        await broadcast_op_update(operation)
 
         return {"status": "completed", "delivery_state": new_state}
 
@@ -306,7 +383,7 @@ async def process_operation(operation: Dict[str, Any]) -> Dict[str, Any]:
         backoff_seconds = compute_backoff(strategy, attempt_number + 1)
         next_time = datetime.utcnow() + timedelta(seconds=backoff_seconds)
 
-        await update_event_state(event_id, "retrying")
+        await update_event_state(event_id, "retrying", f"attempt_{attempt_number}_failed")
 
         next_op = await create_operation(
             event_id=event_id,
@@ -332,6 +409,8 @@ async def process_operation(operation: Dict[str, Any]) -> Dict[str, Any]:
                 "updated_at": datetime.utcnow().isoformat() + "Z",
             }}
         )
+        operation["status"] = "retry_scheduled"
+        await broadcast_op_update(operation)
 
         return {"status": "retry_scheduled", "next_backoff": backoff_seconds}
 
@@ -344,7 +423,7 @@ async def process_operation(operation: Dict[str, Any]) -> Dict[str, Any]:
     else:
         state = "failed"
 
-    await update_event_state(event_id, state)
+    await update_event_state(event_id, state, f"max_{op_type}_attempts")
 
     cancel_pending = db.operations.find({
         "event_id": event_id,
@@ -356,6 +435,8 @@ async def process_operation(operation: Dict[str, Any]) -> Dict[str, Any]:
             {"operation_id": pending_op["operation_id"]},
             {"$set": {"status": "cancelled"}}
         )
+        pending_op["status"] = "cancelled"
+        await broadcast_op_update(pending_op)
 
     await db.operations.update_one(
         {"operation_id": op_id},
@@ -371,6 +452,8 @@ async def process_operation(operation: Dict[str, Any]) -> Dict[str, Any]:
             "updated_at": datetime.utcnow().isoformat() + "Z",
         }}
     )
+    operation["status"] = "failed"
+    await broadcast_op_update(operation)
 
     return {"status": "failed", "delivery_state": state}
 
@@ -432,6 +515,7 @@ async def trigger_retry(event_id: str) -> Dict[str, Any]:
     )
 
     await update_event_state(event_id, "retrying")
+    await broadcast_op_update(operation)
 
     return {
         "status": "scheduled",
@@ -471,6 +555,8 @@ async def trigger_replay(event_id: str) -> Dict[str, Any]:
         attempt_number=1,
         backoff_strategy="moderate",
     )
+
+    await broadcast_op_update(operation)
 
     return {
         "status": "scheduled",

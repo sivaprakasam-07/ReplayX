@@ -1,9 +1,9 @@
-import { useEffect, useState } from "react"
+import { useEffect, useState, useCallback } from "react"
 import MetricCard from "../components/cards/MetricCard"
 import RetryTimelineChart from "../components/charts/RetryTimelineChart"
 import RetryTable from "../components/tables/RetryTable"
 import StatusPill from "../components/common/StatusPill"
-import { getRetryAnalytics, triggerRetry, getOperationsQueue, processPendingOperations } from "../services/api/retryApi"
+import { getRetryAnalytics, triggerRetry, getOperationsQueue, processPendingOperations, getOperationHistory } from "../services/api/retryApi"
 
 const RetryAnalysis = () => {
     const [data, setData] = useState(null)
@@ -11,6 +11,8 @@ const RetryAnalysis = () => {
     const [queue, setQueue] = useState([])
     const [triggerMsg, setTriggerMsg] = useState(null)
     const [triggerLoading, setTriggerLoading] = useState(false)
+    const [transitions, setTransitions] = useState([])
+    const [selectedEventId, setSelectedEventId] = useState(null)
 
     const fetchData = async () => {
         setLoading(true)
@@ -24,21 +26,44 @@ const RetryAnalysis = () => {
         }
     }
 
-    const fetchQueue = async () => {
+    const fetchQueue = useCallback(async () => {
         try {
             const q = await getOperationsQueue("all")
             setQueue(q)
         } catch (e) {
             console.error(e)
         }
-    }
+    }, [])
+
+    const fetchHistory = useCallback(async (eventId) => {
+        try {
+            const h = await getOperationHistory(eventId)
+            setTransitions(h.state_transitions || [])
+        } catch (e) {
+            console.error(e)
+        }
+    }, [])
 
     useEffect(() => {
+        const ws = new WebSocket(`ws://${window.location.hostname}:8000/ws`)
+        ws.onmessage = (event) => {
+            const msg = JSON.parse(event.data)
+            if (msg.type === "OPERATION_UPDATE" || msg.type === "STATE_TRANSITION") {
+                fetchQueue()
+                if (msg.data?.event_id && selectedEventId === msg.data.event_id) {
+                    fetchHistory(msg.data.event_id)
+                }
+            }
+        }
+        ws.onclose = () => setTimeout(() => {
+            const ws2 = new WebSocket(`ws://${window.location.hostname}:8000/ws`)
+            ws2.onmessage = ws.onmessage
+        }, 3000)
         fetchData()
         fetchQueue()
         const interval = setInterval(fetchQueue, 10000)
-        return () => clearInterval(interval)
-    }, [])
+        return () => { clearInterval(interval); ws.close() }
+    }, [fetchQueue, fetchHistory, selectedEventId])
 
     const handleTriggerRetry = async () => {
         setTriggerLoading(true)
@@ -167,7 +192,9 @@ const RetryAnalysis = () => {
                     <h3 className="text-lg font-bold text-[#1F2937] mb-4">Active Operations Queue</h3>
                     <div className="space-y-3">
                         {queue.filter(o => o.status !== "completed").map(op => (
-                            <div key={op.operation_id} className="flex items-center justify-between p-3 rounded-xl bg-[#F8FAFC] border border-[#E5E7EB]">
+                            <div key={op.operation_id}
+                                 className="flex items-center justify-between p-3 rounded-xl bg-[#F8FAFC] border border-[#E5E7EB] cursor-pointer hover:bg-[#E5E7EB]"
+                                 onClick={() => { setSelectedEventId(op.event_id); fetchHistory(op.event_id) }}>
                                 <div>
                                     <p className="text-sm font-semibold">{op.operation_id}</p>
                                     <p className="text-xs text-[#6B7280]">Event: {op.event_id} | Type: {op.operation_type} | Attempt: {op.attempt_number}</p>
@@ -176,6 +203,25 @@ const RetryAnalysis = () => {
                                     <StatusPill status={op.status} />
                                     <span className="text-xs text-[#6B7280]">{new Date(op.scheduled_at).toLocaleTimeString()}</span>
                                 </div>
+                            </div>
+                        ))}
+                    </div>
+                </div>
+            )}
+
+            {transitions.length > 0 && (
+                <div className="bg-white border border-[#E5E7EB] rounded-2xl p-6 shadow-sm">
+                    <div className="flex items-center justify-between mb-4">
+                        <h3 className="text-lg font-bold text-[#1F2937]">State Timeline – {selectedEventId}</h3>
+                        <button onClick={() => setTransitions([])} className="text-xs text-[#6B7280] hover:text-[#1F2937]">Clear</button>
+                    </div>
+                    <div className="relative pl-6 space-y-0">
+                        {transitions.map((t, i) => (
+                            <div key={t.transition_id || i} className="relative pb-5 border-l-2 border-[#E5E7EB] pl-4 last:border-l-0">
+                                <div className="absolute -left-[9px] top-0 w-4 h-4 rounded-full bg-[#1F2937] border-2 border-white" />
+                                <p className="text-xs text-[#6B7280]">{new Date(t.timestamp).toLocaleString()}</p>
+                                <p className="text-sm font-semibold">{t.from_state} → {t.to_state}</p>
+                                {t.reason && <p className="text-xs text-[#6B7280]">{t.reason}</p>}
                             </div>
                         ))}
                     </div>

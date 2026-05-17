@@ -131,3 +131,33 @@ async def api_process_all_pending():
             "result": r,
         })
     return {"processed": len(results), "results": results}
+
+
+@router.get("/operations/history/{event_id}")
+async def get_operation_history(event_id: str):
+    db = get_db()
+    ops_cursor = db.operations.find({"event_id": event_id}).sort("created_at", 1)
+    ops = await ops_cursor.to_list(length=100)
+    transitions_cursor = db.state_transitions.find({"event_id": event_id}).sort("timestamp", 1)
+    transitions = await transitions_cursor.to_list(length=500)
+    for t in transitions:
+        t.pop("_id", None)
+    event = await db.events.find_one({"event_id": event_id})
+    history = []
+    for op in ops:
+        history.append({
+            "operation_id": op["operation_id"],
+            "operation_type": op["operation_type"],
+            "status": op["status"],
+            "attempt_number": op.get("attempt_number", 1),
+            "scheduled_at": op["scheduled_at"],
+            "created_at": op["created_at"],
+            "updated_at": op["updated_at"],
+            "result": op.get("result"),
+        })
+    return {
+        "event_id": event_id,
+        "current_delivery_state": event.get("delivery_state") if event else None,
+        "operations": history,
+        "state_transitions": transitions,
+    }

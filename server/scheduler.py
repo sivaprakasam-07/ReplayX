@@ -4,10 +4,30 @@ from datetime import datetime
 
 from database import get_db
 from services.execution_engine import process_operation
+from services.websocket_manager import manager
 
 POLL_INTERVAL_SECONDS = 5
 
 logger = logging.getLogger("scheduler")
+
+
+async def reset_stuck_operations():
+    db = get_db()
+    stuck = await db.operations.update_many(
+        {"status": "in_progress"},
+        {"$set": {
+            "status": "pending",
+            "crash_recovered": True,
+            "updated_at": datetime.utcnow().isoformat() + "Z",
+        }}
+    )
+    if stuck.modified_count:
+        logger.warning("Crash recovery: reset %d stuck operations to pending", stuck.modified_count)
+        await manager.broadcast({
+            "type": "CRASH_RECOVERED",
+            "data": {"count": stuck.modified_count},
+        })
+    return stuck.modified_count
 
 
 async def process_pending_operations():

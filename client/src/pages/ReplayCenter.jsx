@@ -31,7 +31,19 @@ const ReplayCenter = () => {
     }
 
     useEffect(() => {
+        const ws = new WebSocket(`ws://${window.location.hostname}:8000/ws`)
+        ws.onmessage = (event) => {
+            const msg = JSON.parse(event.data)
+            if (msg.type === "OPERATION_UPDATE" && msg.data?.operation_type === "replay") {
+                fetchReplays()
+            }
+        }
+        ws.onclose = () => setTimeout(() => {
+            const ws2 = new WebSocket(`ws://${window.location.hostname}:8000/ws`)
+            ws2.onmessage = ws.onmessage
+        }, 3000)
         fetchReplays()
+        return () => ws.close()
     }, [])
 
     const handleExecuteReplay = async (eventId) => {
