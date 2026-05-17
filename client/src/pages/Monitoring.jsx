@@ -23,83 +23,120 @@ const Monitoring = () => {
 
     useEffect(() => {
 
-        const fetchEvents = async () => {
+        let socket = null
 
+        const STORAGE_KEY = "replayx:monitoring:events"
+
+        const readStored = () => {
             try {
-
-                setLoading(true)
-
-                const data = await getEvents()
-
-                console.log(
-                    "Events Data:",
-                    data
-                )
-
-                setEvents(data)
-
-            } catch (err) {
-
-                console.error(err)
-
-                setError(
-                    "Failed to fetch monitoring events"
-                )
-
-            } finally {
-
-                setLoading(false)
+                const raw = localStorage.getItem(STORAGE_KEY)
+                if (!raw) return []
+                const parsed = JSON.parse(raw)
+                return Array.isArray(parsed) ? parsed : []
+            } catch (e) {
+                return []
             }
         }
 
-        fetchEvents()
-
-        const wsUrl = import.meta.env.VITE_WS_URL || "ws://127.0.0.1:8000/ws/events"
-
-        const socket = new WebSocket(wsUrl)
-
-        socket.onopen = () => {
-
-            console.log(
-                "WebSocket Connected"
-            )
+        const writeStored = (list) => {
+            try {
+                localStorage.setItem(STORAGE_KEY, JSON.stringify(list))
+            } catch (e) {
+                /* ignore */
+            }
         }
 
-        socket.onmessage = (event) => {
+        const setup = async () => {
 
-            const newEvent = JSON.parse(
-                event.data
-            )
+            // Hydrate from localStorage first for instant UX
+            const cached = readStored()
+            if (cached.length > 0) setEvents(cached)
 
-            console.log(
-                "Realtime Event:",
-                newEvent
-            )
+            try {
+                setLoading(true)
 
-            setEvents((prev) => [
-                newEvent,
-                ...prev,
-            ])
+                const data = await getEvents()
+                console.log("Events Data:", data)
+
+                // Normalize paginated response or direct array
+                const fetched = data?.events || data || []
+                const list = Array.isArray(fetched) ? fetched : []
+
+                // If backend returned items, prefer them and persist
+                if (list.length > 0) {
+                    setEvents(list)
+                    writeStored(list)
+                } else if (cached.length > 0) {
+                    // backend empty but we have cached data — keep cache
+                    setEvents(cached)
+                }
+
+            } catch (err) {
+                console.error(err)
+                setError("Failed to fetch monitoring events")
+            } finally {
+                setLoading(false)
+            }
+
+            // Connect websocket after initial fetch/hydration
+            const wsUrl = import.meta.env.VITE_WS_URL || "ws://127.0.0.1:8000/ws/events"
+
+            try {
+                socket = new WebSocket(wsUrl)
+
+                socket.onopen = () => {
+                    console.log("WebSocket Connected")
+                }
+
+                socket.onmessage = (event) => {
+                    try {
+                        const message = JSON.parse(event.data)
+                        console.log("Realtime Event:", message)
+
+                        // Extract event object from message shape
+                        const incoming = message.data?.event || message
+                        const eventObj = incoming?.event || incoming
+
+                        if (!eventObj || !eventObj.event_id) return
+
+                        setEvents((prev) => {
+                            // Prevent duplicates
+                            const exists = prev.some((e) => e.event_id === eventObj.event_id)
+                            if (exists) return prev
+
+                            const updated = [eventObj, ...prev]
+                            writeStored(updated)
+                            return updated
+                        })
+
+                    } catch (e) {
+                        console.error("Failed to parse websocket message:", e)
+                    }
+                }
+
+                socket.onerror = (error) => {
+                    console.error("WebSocket Error:", error)
+                }
+
+                socket.onclose = () => {
+                    console.log("WebSocket Disconnected")
+                }
+
+            } catch (err) {
+                console.error("WebSocket connection failed:", err)
+            }
         }
 
-        socket.onerror = (error) => {
-
-            console.error(
-                "WebSocket Error:",
-                error
-            )
-        }
-
-        socket.onclose = () => {
-
-            console.log(
-                "WebSocket Disconnected"
-            )
-        }
+        setup()
 
         return () => {
-
-            socket.close()
+            if (socket) {
+                try {
+                    socket.close()
+                } catch (e) {
+                    /* ignore */
+                }
+            }
         }
 
     }, [])

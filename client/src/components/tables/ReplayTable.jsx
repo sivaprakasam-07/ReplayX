@@ -1,7 +1,7 @@
-import { replayData } from "../../data/replayData"
 import StatusPill from "../common/StatusPill"
 
-const ReplayTable = () => {
+const ReplayTable = ({ replays }) => {
+
     return (
         <div className="overflow-hidden rounded-2xl border border-[#E5E7EB] bg-white shadow-sm">
 
@@ -12,23 +12,23 @@ const ReplayTable = () => {
                     <tr>
 
                         <th className="px-6 py-4 text-left text-sm font-semibold text-[#6B7280]">
-                            Replay ID
+                            Event ID
                         </th>
 
                         <th className="px-6 py-4 text-left text-sm font-semibold text-[#6B7280]">
-                            Endpoint
+                            Replay Safe
                         </th>
 
                         <th className="px-6 py-4 text-left text-sm font-semibold text-[#6B7280]">
-                            Status
+                            Risk Level
                         </th>
 
                         <th className="px-6 py-4 text-left text-sm font-semibold text-[#6B7280]">
-                            Recommendation
+                            Failure Reason
                         </th>
 
                         <th className="px-6 py-4 text-left text-sm font-semibold text-[#6B7280]">
-                            Risk
+                            Recommended Action
                         </th>
 
                     </tr>
@@ -37,33 +37,41 @@ const ReplayTable = () => {
 
                 <tbody>
 
-                    {replayData.map((replay) => (
+                    {replays.map((replay) => (
+
                         <tr
-                            key={replay.id}
+                            key={replay.event_id}
                             className="border-b border-[#F1F5F9] hover:bg-[#FAFBFC]"
                         >
 
                             <td className="px-6 py-4 text-sm font-semibold text-[#1F2937]">
-                                {replay.id}
-                            </td>
-
-                            <td className="px-6 py-4 text-sm text-[#6B7280]">
-                                {replay.endpoint}
+                                {replay.event_id}
                             </td>
 
                             <td className="px-6 py-4">
-                                <StatusPill status={replay.status} />
+                                <StatusPill
+                                    status={
+                                        replay.safe_to_replay
+                                            ? "safe"
+                                            : "blocked"
+                                    }
+                                />
+                            </td>
+
+                            <td className="px-6 py-4 text-sm font-medium text-[#1F2937] capitalize">
+                                {replay.risk_level}
+                            </td>
+
+                            <td className="px-6 py-4 text-sm text-[#6B7280]">
+                                {replay.reason}
                             </td>
 
                             <td className="px-6 py-4 text-sm font-medium text-[#1F2937]">
-                                {replay.recommendation}
-                            </td>
-
-                            <td className="px-6 py-4 text-sm text-[#1F2937]">
-                                {replay.risk}
+                                {replay.recommended_action}
                             </td>
 
                         </tr>
+
                     ))}
 
                 </tbody>

@@ -1,6 +1,14 @@
 from fastapi import WebSocket
 from typing import List
 import json
+from bson import ObjectId
+
+class MongoEncoder(json.JSONEncoder):
+    """Custom JSON encoder that handles MongoDB ObjectId and other BSON types"""
+    def default(self, obj):
+        if isinstance(obj, ObjectId):
+            return str(obj)
+        return super().default(obj)
 
 class ConnectionManager:
     def __init__(self):
@@ -19,7 +27,7 @@ class ConnectionManager:
         Broadcasts a JSON message to all connected clients.
         Automatically removes stale/broken connections.
         """
-        msg_str = json.dumps(message)
+        msg_str = json.dumps(message, cls=MongoEncoder)
         
         # Iterate over a copy of the list to allow safe removal during iteration
         for connection in list(self.active_connections):

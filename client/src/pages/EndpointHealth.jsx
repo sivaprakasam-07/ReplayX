@@ -1,49 +1,145 @@
+import {
+    useEffect,
+    useState,
+} from "react"
+
 import MetricCard from "../components/cards/MetricCard"
 import HealthCard from "../components/cards/HealthCard"
 import EndpointHealthChart from "../components/charts/EndpointHealthChart"
 import StatusPill from "../components/common/StatusPill"
-import { endpointData } from "../data/endpointData"
+
+import {
+    getEndpointsHealth,
+} from "../services/api/endpointApi"
 
 const EndpointHealth = () => {
+
+    const [endpoints, setEndpoints] =
+        useState([])
+
+    const [loading, setLoading] =
+        useState(true)
+
+    useEffect(() => {
+
+        const fetchEndpoints =
+            async () => {
+
+                try {
+
+                    const data =
+                        await getEndpointsHealth()
+
+                    setEndpoints(data)
+
+                } catch (error) {
+
+                    console.error(error)
+
+                } finally {
+
+                    setLoading(false)
+                }
+            }
+
+        fetchEndpoints()
+
+    }, [])
+
+    const healthyEndpoints =
+        endpoints.filter(
+            (e) =>
+                e.health ===
+                "healthy"
+        ).length
+
+    const criticalEndpoints =
+        endpoints.filter(
+            (e) =>
+                e.health ===
+                "critical"
+        ).length
+
+    const avgUptime =
+        endpoints.length
+            ? (
+                endpoints.reduce(
+                    (
+                        acc,
+                        curr
+                    ) =>
+                        acc +
+                        curr.uptime,
+                    0
+                ) /
+                endpoints.length
+            ).toFixed(1)
+            : 0
+
+    const avgRisk =
+        endpoints.length
+            ? (
+                endpoints.reduce(
+                    (
+                        acc,
+                        curr
+                    ) =>
+                        acc +
+                        curr.risk_score,
+                    0
+                ) /
+                endpoints.length
+            ).toFixed(2)
+            : 0
+
+    const chartData = [
+        ...(healthyEndpoints > 0 ? [{ name: "Healthy", value: healthyEndpoints }] : []),
+        ...(criticalEndpoints > 0 ? [{ name: "Critical", value: criticalEndpoints }] : []),
+    ]
+
     return (
         <div className="space-y-8">
 
             <div>
+
                 <h1 className="text-4xl font-bold tracking-tight text-[#1F2937]">
                     Endpoint Health Intelligence
                 </h1>
 
                 <p className="text-[#6B7280] mt-2">
-                    AI-assisted endpoint monitoring, anomaly detection, and operational reliability analytics.
+                    AI-assisted endpoint monitoring,
+                    anomaly detection,
+                    and operational reliability analytics.
                 </p>
+
             </div>
 
             <div className="grid grid-cols-1 gap-5 md:grid-cols-2 xl:grid-cols-4">
 
                 <MetricCard
                     title="Stable Endpoints"
-                    value="128"
+                    value={healthyEndpoints}
                     change="+4.2%"
                     status="positive"
                 />
 
                 <MetricCard
                     title="Critical Endpoints"
-                    value="12"
+                    value={criticalEndpoints}
                     change="+1.6%"
                     status="negative"
                 />
 
                 <MetricCard
                     title="Avg Uptime"
-                    value="98.4%"
+                    value={`${avgUptime}%`}
                     change="+2.1%"
                     status="positive"
                 />
 
                 <MetricCard
                     title="Risk Alerts"
-                    value="18"
+                    value={avgRisk}
                     change="+3.8%"
                     status="negative"
                 />
@@ -55,6 +151,7 @@ const EndpointHealth = () => {
                 <div className="xl:col-span-2 bg-white border border-[#E5E7EB] rounded-2xl p-6 shadow-sm">
 
                     <div className="mb-6">
+
                         <h2 className="text-2xl font-bold text-[#1F2937]">
                             Endpoint Health Distribution
                         </h2>
@@ -62,9 +159,12 @@ const EndpointHealth = () => {
                         <p className="text-sm text-[#6B7280] mt-1">
                             Stability analysis across webhook endpoints
                         </p>
+
                     </div>
 
-                    <EndpointHealthChart />
+                    <EndpointHealthChart
+                        chartData={chartData}
+                    />
 
                 </div>
 
@@ -106,70 +206,96 @@ const EndpointHealth = () => {
 
                 </div>
 
-                <table className="w-full">
+                {loading ? (
 
-                    <thead className="bg-[#F8FAFC] border-b border-[#E5E7EB]">
+                    <div className="p-10 text-center text-[#6B7280]">
+                        Loading endpoint health...
+                    </div>
 
-                        <tr>
+                ) : (
 
-                            <th className="px-6 py-4 text-left text-sm font-semibold text-[#6B7280]">
-                                Endpoint ID
-                            </th>
+                    <table className="w-full">
 
-                            <th className="px-6 py-4 text-left text-sm font-semibold text-[#6B7280]">
-                                Endpoint
-                            </th>
+                        <thead className="bg-[#F8FAFC] border-b border-[#E5E7EB]">
 
-                            <th className="px-6 py-4 text-left text-sm font-semibold text-[#6B7280]">
-                                Health
-                            </th>
+                            <tr>
 
-                            <th className="px-6 py-4 text-left text-sm font-semibold text-[#6B7280]">
-                                Uptime
-                            </th>
+                                <th className="px-6 py-4 text-left text-sm font-semibold text-[#6B7280]">
+                                    Endpoint
+                                </th>
 
-                            <th className="px-6 py-4 text-left text-sm font-semibold text-[#6B7280]">
-                                Risk
-                            </th>
+                                <th className="px-6 py-4 text-left text-sm font-semibold text-[#6B7280]">
+                                    Health
+                                </th>
 
-                        </tr>
+                                <th className="px-6 py-4 text-left text-sm font-semibold text-[#6B7280]">
+                                    Uptime
+                                </th>
 
-                    </thead>
+                                <th className="px-6 py-4 text-left text-sm font-semibold text-[#6B7280]">
+                                    Risk Score
+                                </th>
 
-                    <tbody>
-
-                        {endpointData.map((endpoint) => (
-                            <tr
-                                key={endpoint.id}
-                                className="border-b border-[#F1F5F9] hover:bg-[#FAFBFC]"
-                            >
-
-                                <td className="px-6 py-4 text-sm font-semibold text-[#1F2937]">
-                                    {endpoint.id}
-                                </td>
-
-                                <td className="px-6 py-4 text-sm text-[#6B7280]">
-                                    {endpoint.endpoint}
-                                </td>
-
-                                <td className="px-6 py-4">
-                                    <StatusPill status={endpoint.health} />
-                                </td>
-
-                                <td className="px-6 py-4 text-sm text-[#1F2937]">
-                                    {endpoint.uptime}
-                                </td>
-
-                                <td className="px-6 py-4 text-sm font-medium text-[#1F2937]">
-                                    {endpoint.risk}
-                                </td>
+                                <th className="px-6 py-4 text-left text-sm font-semibold text-[#6B7280]">
+                                    Avg Latency
+                                </th>
 
                             </tr>
-                        ))}
 
-                    </tbody>
+                        </thead>
 
-                </table>
+                        <tbody>
+
+                            {endpoints.map(
+                                (
+                                    endpoint,
+                                    index
+                                ) => (
+
+                                    <tr
+                                        key={`${endpoint.endpoint}-${index}`}
+                                        className="border-b border-[#F1F5F9] hover:bg-[#FAFBFC]"
+                                    >
+
+                                        <td className="px-6 py-4 text-sm font-semibold text-[#1F2937]">
+                                            {endpoint.endpoint}
+                                        </td>
+
+                                        <td className="px-6 py-4">
+
+                                            <StatusPill
+                                                status={
+                                                    endpoint.health
+                                                }
+                                            />
+
+                                        </td>
+
+                                        <td className="px-6 py-4 text-sm text-[#1F2937]">
+                                            {Number(endpoint.uptime).toFixed(1)}%
+                                        </td>
+
+                                        <td className="px-6 py-4 text-sm font-medium text-[#1F2937]">
+                                            {endpoint.risk_score}
+                                        </td>
+
+                                        <td className="px-6 py-4 text-sm text-[#1F2937]">
+                                            {
+                                                endpoint.avg_latency
+                                            }
+                                            ms
+                                        </td>
+
+                                    </tr>
+
+                                )
+                            )}
+
+                        </tbody>
+
+                    </table>
+
+                )}
 
             </div>
 
