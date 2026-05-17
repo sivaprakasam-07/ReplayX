@@ -11,7 +11,7 @@ class RetryIntelligenceEngine:
         Main analysis function to determine delivery state and failure reasons.
         """
         # Default baseline
-        delivery_state = "retrying"
+        delivery_state = "retry"
         failure_reason = "none"
         safe_to_replay = True
         recommended_action = "none"
@@ -26,7 +26,7 @@ class RetryIntelligenceEngine:
 
         # Check if endpoint is active
         if not endpoint.get("active", True):
-            delivery_state = "failed"
+            delivery_state = "critical"
             failure_reason = "endpoint_deleted"
             safe_to_replay = False
             recommended_action = "contact_customer_to_restore_endpoint"
@@ -51,7 +51,7 @@ class RetryIntelligenceEngine:
                     safe_to_replay = False
                     recommended_action = "none"
                 else:
-                    delivery_state = "delivered"
+                    delivery_state = "success"
                     failure_reason = "none"
                     safe_to_replay = False
                     recommended_action = "none"
@@ -59,31 +59,31 @@ class RetryIntelligenceEngine:
 
         # All attempts failed so far. Analyze why.
         if latest_attempt.get("response_body_category") == "invalid_signature":
-            delivery_state = "failed"
+            delivery_state = "blocked"
             failure_reason = "invalid_signature"
             safe_to_replay = False
             recommended_action = "verify_customer_secret_and_signature_algorithm"
 
         elif latest_attempt.get("response_body_category") == "rate_limited":
-            delivery_state = "retrying" if latest_attempt.get("retry_scheduled") else "failed"
+            delivery_state = "warning" if latest_attempt.get("retry_scheduled") else "failed"
             failure_reason = "rate_limited"
             safe_to_replay = True
             recommended_action = "apply_exponential_backoff_or_increase_customer_limit"
 
         elif latest_attempt.get("response_body_category") == "payload_too_large":
-            delivery_state = "failed"
+            delivery_state = "blocked"
             failure_reason = "payload_too_large"
             safe_to_replay = False
             recommended_action = "compress_payload_or_send_reference_id_only"
 
         elif latest_attempt.get("response_body_category") in ["endpoint_not_found", "server_error", "timeout", "malformed_response"]:
-            delivery_state = "retrying" if latest_attempt.get("retry_scheduled") else "failed"
+            delivery_state = "retry" if latest_attempt.get("retry_scheduled") else "failed"
             failure_reason = "customer_endpoint_down"
             safe_to_replay = True
             recommended_action = "monitor_endpoint_health"
             
             if len(attempts) >= 5: # Assuming 5 is max retries
-                 delivery_state = "expired"
+                 delivery_state = "critical"
                  failure_reason = "timeout" # Or customer_endpoint_down
                  safe_to_replay = True
                  recommended_action = "mark_as_dead_letter_and_notify_support"

@@ -24,10 +24,16 @@ async def get_endpoint_config(endpoint_id: str) -> Optional[dict]:
         endpoint["_id"] = str(endpoint["_id"])
     return endpoint
 
-async def get_all_events(limit: int = 50, skip: int = 0) -> List[dict]:
+async def get_all_events(limit: int = 50, skip: int = 0) -> dict:
     db = get_db()
+    total = await db.events.count_documents({})
     cursor = db.events.find({}).skip(skip).limit(limit)
     events = await cursor.to_list(length=limit)
     for event in events:
         event["_id"] = str(event["_id"])
-    return events
+    return {
+        "total": total,
+        "limit": limit,
+        "skip": skip,
+        "events": events
+    }
