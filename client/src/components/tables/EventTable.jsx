@@ -1,7 +1,7 @@
 import StatusPill from "../common/StatusPill"
 import { motion, AnimatePresence } from "framer-motion"
 
-const EventTable = ({ events = [] }) => {
+const EventTable = ({ events = [], onSelectEvent }) => {
     return (
         <div className="overflow-hidden rounded-2xl border border-[#E5E7EB] bg-white shadow-sm">
 
@@ -48,7 +48,16 @@ const EventTable = ({ events = [] }) => {
                                         exit={{ opacity: 0, y: -6 }}
                                         transition={{ duration: 0.25 }}
                                         layout
-                                        className="border-b border-[#F1F5F9] hover:bg-[#FAFBFC] transition-colors"
+                                        role="button"
+                                        tabIndex={0}
+                                        onClick={() => onSelectEvent?.(event.event_id)}
+                                        onKeyDown={(keyboardEvent) => {
+                                            if (keyboardEvent.key === "Enter" || keyboardEvent.key === " ") {
+                                                keyboardEvent.preventDefault()
+                                                onSelectEvent?.(event.event_id)
+                                            }
+                                        }}
+                                        className="border-b border-[#F1F5F9] hover:bg-[#FAFBFC] transition-colors cursor-pointer"
                                     >
 
                                         <td className="px-6 py-4 text-sm font-semibold text-[#1F2937]">

@@ -20,6 +20,7 @@ const Monitoring = () => {
 
     const [selectedEvent, setSelectedEvent] = useState(null)
     const [analysis, setAnalysis] = useState(null)
+    const [eventLoading, setEventLoading] = useState(false)
 
     const [modalOpen, setModalOpen] = useState(false)
     const [metrics, setMetrics] = useState(null)
@@ -160,15 +161,25 @@ const Monitoring = () => {
         eventId
     ) => {
 
+        console.log("Selected Event:", eventId)
+        setModalOpen(true)
+        setEventLoading(true)
+        setSelectedEvent(null)
+        setAnalysis(null)
+
         try {
 
             const eventDetails =
                 await getEventById(eventId)
 
+            console.log("Event Details:", eventDetails)
+
             const intelligence =
                 await getEventIntelligence(
                     eventId
                 )
+
+            console.log("Intelligence:", intelligence)
 
             setSelectedEvent(
                 eventDetails
@@ -178,14 +189,14 @@ const Monitoring = () => {
                 intelligence
             )
 
-            setModalOpen(true)
-
         } catch (err) {
 
             console.error(
                 "Failed to fetch event intelligence",
                 err
             )
+        } finally {
+            setEventLoading(false)
         }
     }
 
@@ -294,6 +305,7 @@ const Monitoring = () => {
                 }
                 eventDetails={selectedEvent}
                 analysis={analysis}
+                loading={eventLoading}
             />
 
         </div>

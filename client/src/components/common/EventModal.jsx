@@ -5,9 +5,19 @@ const EventModal = ({
     onClose,
     eventDetails,
     analysis,
+    loading = false,
 }) => {
 
     if (!isOpen) return null
+
+    const eventData = eventDetails?.event || eventDetails || null
+    const deliveryHistory = eventDetails?.delivery_history || eventDetails?.deliveryHistory || []
+
+    const displayValue = (value, fallback = "--") => {
+        return value === null || value === undefined || value === ""
+            ? fallback
+            : value
+    }
 
     return (
         <AnimatePresence>
@@ -64,6 +74,12 @@ const EventModal = ({
 
                     <div className="p-8 space-y-8 max-h-[80vh] overflow-y-auto">
 
+                        {loading ? (
+                            <div className="rounded-2xl border border-[#E5E7EB] bg-[#F8FAFC] p-6 text-sm text-[#6B7280]">
+                                Loading event intelligence...
+                            </div>
+                        ) : null}
+
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
 
                             <div className="bg-[#F8FAFC] rounded-2xl p-6 border border-[#E5E7EB]">
@@ -80,7 +96,7 @@ const EventModal = ({
                                         </p>
 
                                         <p className="font-semibold text-[#1F2937]">
-                                            {eventDetails?.event?.event_id}
+                                            {displayValue(eventData?.event_id)}
                                         </p>
                                     </div>
 
@@ -90,7 +106,7 @@ const EventModal = ({
                                         </p>
 
                                         <p className="font-semibold text-[#1F2937]">
-                                            {eventDetails?.event?.event_type}
+                                            {displayValue(eventData?.event_type)}
                                         </p>
                                     </div>
 
@@ -100,7 +116,7 @@ const EventModal = ({
                                         </p>
 
                                         <p className="font-semibold text-[#1F2937]">
-                                            {eventDetails?.event?.customer_id}
+                                            {displayValue(eventData?.customer_id)}
                                         </p>
                                     </div>
 
@@ -122,7 +138,7 @@ const EventModal = ({
                                         </p>
 
                                         <p className="font-semibold text-[#1F2937]">
-                                            {analysis?.delivery_state}
+                                            {displayValue(analysis?.delivery_state)}
                                         </p>
                                     </div>
 
@@ -132,7 +148,7 @@ const EventModal = ({
                                         </p>
 
                                         <p className="font-semibold text-[#1F2937]">
-                                            {analysis?.failure_reason}
+                                            {displayValue(analysis?.failure_reason)}
                                         </p>
                                     </div>
 
@@ -142,7 +158,7 @@ const EventModal = ({
                                         </p>
 
                                         <p className="font-semibold text-[#1F2937]">
-                                            {analysis?.recommended_action}
+                                            {displayValue(analysis?.recommended_action)}
                                         </p>
                                     </div>
 
@@ -163,7 +179,9 @@ const EventModal = ({
                                 <h2 className="text-3xl font-bold text-green-800 mt-2">
                                     {analysis?.safe_to_replay
                                         ? "Safe"
-                                        : "Blocked"}
+                                        : analysis?.safe_to_replay === false
+                                            ? "Blocked"
+                                            : "--"}
                                 </h2>
 
                             </div>
@@ -175,7 +193,7 @@ const EventModal = ({
                                 </p>
 
                                 <h2 className="text-3xl font-bold text-indigo-800 mt-2">
-                                    {analysis?.risk_score}
+                                    {displayValue(analysis?.risk_score)}
                                 </h2>
 
                             </div>
@@ -190,34 +208,37 @@ const EventModal = ({
 
                             <div className="space-y-4">
 
-                                {eventDetails?.delivery_history?.map(
-                                    (
-                                        delivery,
-                                        index
-                                    ) => (
+                                {deliveryHistory.length > 0 ? (
+                                    deliveryHistory.map(
+                                        (delivery, index) => (
 
-                                        <div
-                                            key={index}
-                                            className="flex items-center justify-between p-4 bg-white rounded-xl border border-[#E5E7EB]"
-                                        >
+                                            <div
+                                                key={index}
+                                                className="flex items-center justify-between p-4 bg-white rounded-xl border border-[#E5E7EB]"
+                                            >
 
-                                            <div>
-                                                <p className="font-semibold text-[#1F2937]">
-                                                    Attempt #{delivery.attempt_number}
-                                                </p>
+                                                <div>
+                                                    <p className="font-semibold text-[#1F2937]">
+                                                        Attempt #{displayValue(delivery.attempt_number)}
+                                                    </p>
 
-                                                <p className="text-sm text-[#6B7280] mt-1">
-                                                    {delivery.failure_reason || "Successful delivery"}
-                                                </p>
+                                                    <p className="text-sm text-[#6B7280] mt-1">
+                                                        {delivery.failure_reason || "Successful delivery"}
+                                                    </p>
+                                                </div>
+
+                                                <div className="text-sm font-medium text-[#1F2937]">
+                                                    {displayValue(delivery.delivery_status)}
+                                                </div>
+
                                             </div>
 
-                                            <div className="text-sm font-medium text-[#1F2937]">
-                                                {delivery.delivery_status}
-                                            </div>
-
-                                        </div>
-
+                                        )
                                     )
+                                ) : (
+                                    <div className="text-sm text-[#6B7280]">
+                                        No delivery history available.
+                                    </div>
                                 )}
 
                             </div>
