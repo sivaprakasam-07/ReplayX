@@ -7,15 +7,15 @@ import {
 } from "recharts"
 
 const COLORS = [
-    "#8FAF9F",
-    "#F59E0B",
-    "#EF4444",
+    "#15803D",
+    "#D97706",
+    "#DC2626",
 ]
 
 const EndpointHealthChart = ({
     chartData,
 }) => {
-    // Handle empty or missing data
+
     if (!chartData || chartData.length === 0) {
         return (
             <div className="h-[340px] flex items-center justify-center text-[#6B7280]">
@@ -65,7 +65,12 @@ const EndpointHealthChart = ({
 
                     </Pie>
 
-                    <Tooltip />
+                    <Tooltip
+                        formatter={(value) => [
+                            `${value} endpoints`,
+                            "Count",
+                        ]}
+                    />
 
                 </PieChart>
 

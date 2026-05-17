@@ -1,11 +1,18 @@
 import { activityData } from "../../data/activityData"
 import StatusPill from "../common/StatusPill"
 
-const LiveActivityTable = () => {
+const LiveActivityTable = ({ activities = null }) => {
+
+    const displayActivities =
+        activities && activities.length > 0
+            ? activities
+            : activityData
+
     return (
         <div className="space-y-4">
 
-            {activityData.map((activity) => (
+            {displayActivities.map((activity) => (
+
                 <div
                     key={activity.id}
                     className="flex items-start justify-between pb-4 border-b border-[#F1F5F9] last:border-none"
@@ -23,9 +30,12 @@ const LiveActivityTable = () => {
 
                     </div>
 
-                    <StatusPill status={activity.status} />
+                    <StatusPill
+                        status={activity.status}
+                    />
 
                 </div>
+
             ))}
 
         </div>

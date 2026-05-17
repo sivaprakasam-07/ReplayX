@@ -1,14 +1,45 @@
-const statusStyles = {
-    success: "bg-green-100 text-green-700",
-    failed: "bg-red-100 text-red-700",
-    retry: "bg-indigo-100 text-indigo-700",
-    warning: "bg-amber-100 text-amber-700",
-}
+const StatusPill = ({
+    status,
+}) => {
 
-const StatusPill = ({ status }) => {
+    const normalizedStatus =
+        status?.toLowerCase()
+
+    const styles = {
+        healthy:
+            "bg-[#DCFCE7] text-[#15803D]",
+
+        success:
+            "bg-[#DCFCE7] text-[#15803D]",
+
+        warning:
+            "bg-[#FEF3C7] text-[#D97706]",
+
+        pending:
+            "bg-[#FEF3C7] text-[#D97706]",
+
+        critical:
+            "bg-[#FEE2E2] text-[#DC2626]",
+
+        failed:
+            "bg-[#FEE2E2] text-[#DC2626]",
+
+        retrying:
+            "bg-[#DBEAFE] text-[#2563EB]",
+    }
+
     return (
         <span
-            className={`px-2.5 py-1 rounded-full text-xs font-semibold capitalize ${statusStyles[status]}`}
+            className={`
+                inline-flex
+                items-center
+                px-3
+                py-1
+                rounded-full
+                text-xs
+                font-semibold
+                ${styles[normalizedStatus]}
+            `}
         >
             {status}
         </span>

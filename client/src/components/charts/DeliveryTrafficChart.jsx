@@ -10,13 +10,18 @@ import {
 
 import { deliveryData } from "../../data/deliveryData"
 
-const DeliveryTrafficChart = () => {
+const DeliveryTrafficChart = ({ data = null }) => {
+
+    const chartData =
+        data && data.length > 0
+            ? data
+            : deliveryData
+
     return (
         <div className="h-[300px] w-full">
 
             <ResponsiveContainer width="100%" height="100%">
-
-                <AreaChart data={deliveryData}>
+                <AreaChart data={chartData}>
 
                     <defs>
 
@@ -79,6 +84,7 @@ const DeliveryTrafficChart = () => {
                     />
 
                     <YAxis
+                        yAxisId="success"
                         tick={{
                             fill: "#6B7280",
                             fontSize: 12,
@@ -87,9 +93,16 @@ const DeliveryTrafficChart = () => {
                         tickLine={false}
                     />
 
+                    <YAxis
+                        yAxisId="failed"
+                        orientation="right"
+                        hide
+                    />
+
                     <Tooltip />
 
                     <Area
+                        yAxisId="success"
                         type="monotone"
                         dataKey="success"
                         stroke="#5B6CFF"
@@ -98,10 +111,11 @@ const DeliveryTrafficChart = () => {
                     />
 
                     <Area
+                        yAxisId="failed"
                         type="monotone"
                         dataKey="failed"
                         stroke="#EF4444"
-                        strokeWidth={2}
+                        strokeWidth={2.5}
                         fill="url(#failedGradient)"
                     />
 

@@ -53,6 +53,13 @@ const EndpointHealth = () => {
                 "healthy"
         ).length
 
+    const warningEndpoints =
+        endpoints.filter(
+            (e) =>
+                e.health ===
+                "warning"
+        ).length
+
     const criticalEndpoints =
         endpoints.filter(
             (e) =>
@@ -93,8 +100,32 @@ const EndpointHealth = () => {
             : 0
 
     const chartData = [
-        ...(healthyEndpoints > 0 ? [{ name: "Healthy", value: healthyEndpoints }] : []),
-        ...(criticalEndpoints > 0 ? [{ name: "Critical", value: criticalEndpoints }] : []),
+        ...(healthyEndpoints > 0
+            ? [
+                {
+                    name: "Healthy",
+                    value: healthyEndpoints,
+                },
+            ]
+            : []),
+
+        ...(warningEndpoints > 0
+            ? [
+                {
+                    name: "Warning",
+                    value: warningEndpoints,
+                },
+            ]
+            : []),
+
+        ...(criticalEndpoints > 0
+            ? [
+                {
+                    name: "Critical",
+                    value: criticalEndpoints,
+                },
+            ]
+            : []),
     ]
 
     return (
@@ -114,13 +145,20 @@ const EndpointHealth = () => {
 
             </div>
 
-            <div className="grid grid-cols-1 gap-5 md:grid-cols-2 xl:grid-cols-4">
+            <div className="grid grid-cols-1 gap-5 md:grid-cols-2 xl:grid-cols-5">
 
                 <MetricCard
                     title="Stable Endpoints"
                     value={healthyEndpoints}
                     change="+4.2%"
                     status="positive"
+                />
+
+                <MetricCard
+                    title="Warning Endpoints"
+                    value={warningEndpoints}
+                    change="+0.8%"
+                    status="neutral"
                 />
 
                 <MetricCard

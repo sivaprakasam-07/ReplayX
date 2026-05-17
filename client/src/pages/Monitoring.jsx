@@ -3,6 +3,7 @@ import { useEffect, useState } from "react"
 import MetricCard from "../components/cards/MetricCard"
 import EventTable from "../components/tables/EventTable"
 import EventModal from "../components/common/EventModal"
+import StatusPill from "../components/common/StatusPill"
 
 import {
     getEvents,
