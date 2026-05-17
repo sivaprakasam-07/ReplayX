@@ -1,9 +1,11 @@
 import { useEffect, useState } from "react"
+import toast from "react-hot-toast"
 
 import MetricCard from "../components/cards/MetricCard"
 import EventTable from "../components/tables/EventTable"
 import EventModal from "../components/common/EventModal"
 import StatusPill from "../components/common/StatusPill"
+import EventToast from "../components/common/EventToast"
 
 import {
     getEvents,
@@ -11,8 +13,11 @@ import {
     getEventIntelligence,
 } from "../services/api/monitoringApi"
 import api from "../services/api/axios"
+import { subscribeToRealtimeEvents, isRetryLifecycleMessage } from "../services/socket"
 
 const Monitoring = () => {
+    // fallback dedupe set when toast.isActive isn't available
+    const activeToastIds = new Set()
 
     const [events, setEvents] = useState([])
     const [loading, setLoading] = useState(true)
@@ -25,23 +30,51 @@ const Monitoring = () => {
     const [modalOpen, setModalOpen] = useState(false)
     const [metrics, setMetrics] = useState(null)
 
-    useEffect(() => {
-        const fetchMetrics = async () => {
-            try {
-                const response = await api.get('/dashboard/metrics');
-                setMetrics(response.data);
-            } catch (error) {
-                console.error("Failed to fetch metrics", error);
+    const fetchMetrics = async () => {
+        try {
+            const response = await api.get("/dashboard/metrics")
+            setMetrics(response.data)
+        } catch (error) {
+            console.error("Failed to fetch metrics", error)
+        }
+    }
+
+    const fetchEvents = async ({ silent = false } = {}) => {
+        try {
+            if (!silent) {
+                setLoading(true)
             }
-        };
-        fetchMetrics();
-    }, []);
+
+            const data = await getEvents()
+            const fetched = data?.events || data || []
+            const list = Array.isArray(fetched) ? fetched : []
+
+            if (list.length > 0) {
+                setEvents(list)
+                setError(null)
+                try {
+                    localStorage.setItem("replayx:monitoring:events", JSON.stringify(list))
+                } catch (error) {
+                    console.error(error)
+                }
+            }
+
+            return list
+        } catch (err) {
+            console.error(err)
+            setError("Failed to fetch monitoring events")
+            return []
+        } finally {
+            if (!silent) {
+                setLoading(false)
+            }
+        }
+    }
 
     useEffect(() => {
-
-        let socket = null
 
         const STORAGE_KEY = "replayx:monitoring:events"
+        let active = true
 
         const readStored = () => {
             try {
@@ -54,104 +87,72 @@ const Monitoring = () => {
             }
         }
 
-        const writeStored = (list) => {
-            try {
-                localStorage.setItem(STORAGE_KEY, JSON.stringify(list))
-            } catch (e) {
-                /* ignore */
-            }
-        }
-
         const setup = async () => {
+
+            if (!active) {
+                return null
+            }
 
             // Hydrate from localStorage first for instant UX
             const cached = readStored()
             if (cached.length > 0) setEvents(cached)
 
-            try {
-                setLoading(true)
-
-                const data = await getEvents()
-                console.log("Events Data:", data)
-
-                // Normalize paginated response or direct array
-                const fetched = data?.events || data || []
-                const list = Array.isArray(fetched) ? fetched : []
-
-                // If backend returned items, prefer them and persist
-                if (list.length > 0) {
-                    setEvents(list)
-                    writeStored(list)
-                } else if (cached.length > 0) {
-                    // backend empty but we have cached data — keep cache
-                    setEvents(cached)
-                }
-
-            } catch (err) {
-                console.error(err)
-                setError("Failed to fetch monitoring events")
-            } finally {
-                setLoading(false)
+            const list = await fetchEvents()
+            if (list.length === 0 && cached.length > 0) {
+                setEvents(cached)
             }
 
-            // Connect websocket after initial fetch/hydration
-            const wsUrl = import.meta.env.VITE_WS_URL || "ws://127.0.0.1:8000/ws/events"
+            await fetchMetrics()
 
-            try {
-                socket = new WebSocket(wsUrl)
+            const unsubscribe = subscribeToRealtimeEvents(async (message) => {
+                if (isRetryLifecycleMessage(message)) {
+                    const idParts = [message.type, message.operation_id || message.event_id || message.id || "unknown"].filter(Boolean)
+                    const toastId = idParts.join("-")
 
-                socket.onopen = () => {
-                    console.log("WebSocket Connected")
-                }
+                    const hasIsActive = typeof toast.isActive === "function"
+                    const already = hasIsActive ? toast.isActive(toastId) : activeToastIds.has(toastId)
 
-                socket.onmessage = (event) => {
-                    try {
-                        const message = JSON.parse(event.data)
-                        console.log("Realtime Event:", message)
+                    if (!already) {
+                        if (!hasIsActive) {
+                            activeToastIds.add(toastId)
+                            setTimeout(() => activeToastIds.delete(toastId), 3500)
+                        }
 
-                        // Extract event object from message shape
-                        const incoming = message.data?.event || message
-                        const eventObj = incoming?.event || incoming
-
-                        if (!eventObj || !eventObj.event_id) return
-
-                        setEvents((prev) => {
-                            // Prevent duplicates
-                            const exists = prev.some((e) => e.event_id === eventObj.event_id)
-                            if (exists) return prev
-
-                            const updated = [eventObj, ...prev]
-                            writeStored(updated)
-                            return updated
-                        })
-
-                    } catch (e) {
-                        console.error("Failed to parse websocket message:", e)
+                        toast.custom(() => (
+                            <EventToast
+                                type={message.status === "success" ? "success" : "error"}
+                                message={message.message || (message.status === "success" ? "Retry completed successfully" : "Retry failed")}
+                            />
+                        ), { id: toastId, duration: 3000 })
                     }
                 }
 
-                socket.onerror = (error) => {
-                    console.error("WebSocket Error:", error)
+                if (message.event_id || message.type === "NEW_SIMULATION" || isRetryLifecycleMessage(message)) {
+                    await Promise.all([
+                        fetchEvents({ silent: true }),
+                        fetchMetrics(),
+                    ])
                 }
+            })
 
-                socket.onclose = () => {
-                    console.log("WebSocket Disconnected")
-                }
-
-            } catch (err) {
-                console.error("WebSocket connection failed:", err)
-            }
+            return unsubscribe
         }
 
-        setup()
+        let unsubscribe = null
+        setup().then((cleanup) => {
+            if (!active) {
+                if (cleanup) {
+                    cleanup()
+                }
+                return
+            }
+            unsubscribe = cleanup
+        })
 
         return () => {
-            if (socket) {
-                try {
-                    socket.close()
-                } catch (e) {
-                    /* ignore */
-                }
+            active = false
+            if (unsubscribe) {
+                unsubscribe()
             }
         }
 

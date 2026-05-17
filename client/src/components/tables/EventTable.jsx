@@ -77,23 +77,30 @@ const EventTable = ({ events = [], onSelectEvent }) => {
                                         </td>
 
                                         <td className="px-6 py-4">
-                                            <StatusPill
-                                                status={
+                                            {(() => {
+                                                const currentStatus =
                                                     event.delivery_state ||
-                                                    "success"
-                                                }
-                                            />
+                                                    event.status ||
+                                                    "unknown"
+
+                                                return (
+                                                    <StatusPill
+                                                        status={
+                                                            currentStatus
+                                                        }
+                                                    />
+                                                )
+                                            })()}
                                         </td>
 
                                         <td className="px-6 py-4">
                                             {event.risk_score != null ? (
-                                                <span className={`inline-flex items-center px-3 py-1 rounded-full text-xs font-semibold ${
-                                                    event.risk_score > 0.7
+                                                <span className={`inline-flex items-center px-3 py-1 rounded-full text-xs font-semibold ${event.risk_score > 0.7
                                                         ? "bg-[#FEE2E2] text-[#DC2626]"
                                                         : event.risk_score > 0.3
                                                             ? "bg-[#FEF3C7] text-[#D97706]"
                                                             : "bg-[#DCFCE7] text-[#15803D]"
-                                                }`}>
+                                                    }`}>
                                                     {(event.risk_score * 100).toFixed(0)}
                                                 </span>
                                             ) : (

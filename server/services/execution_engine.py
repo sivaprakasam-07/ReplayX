@@ -8,6 +8,7 @@ from typing import Dict, Any, Optional, List
 from database import get_db
 from services.ml_integration import ml_scorer
 from services.retry_intelligence import intelligence_engine
+from services.websocket_manager import manager
 
 SIMULATE_DELIVERY = True
 
@@ -53,6 +54,14 @@ async def update_event_state(event_id: str, delivery_state: str):
     await db.events.update_one(
         {"event_id": event_id},
         {"$set": {"delivery_state": delivery_state}}
+    )
+
+
+async def update_event_delivery_status(event_id: str, delivery_state: str, status: str):
+    db = get_db()
+    await db.events.update_one(
+        {"event_id": event_id},
+        {"$set": {"delivery_state": delivery_state, "status": status}}
     )
 
 
@@ -155,7 +164,7 @@ async def simulate_delivery(endpoint: Dict[str, Any]) -> Dict[str, Any]:
 
 
 def pick_backoff_strategy(ml_prediction: Dict[str, Any]) -> str:
-    prob = ml_prediction.get("ml_predictions", {}).get("retry_success_probability", 50)
+    prob = normalize_probability(ml_prediction.get("ml_predictions", {}).get("retry_success_probability", 50))
     if prob >= 70:
         return "aggressive"
     elif prob >= 40:
@@ -167,6 +176,55 @@ def compute_backoff(strategy: str, attempt_number: int) -> int:
     table = BACKOFF_TABLE.get(strategy, BACKOFF_TABLE["moderate"])
     idx = min(attempt_number - 1, len(table) - 1)
     return table[idx]
+
+
+def normalize_probability(probability: float) -> float:
+    if probability <= 1:
+        return probability * 100
+    return probability
+
+
+def get_retry_execution_success_probability(retry_success_probability: float) -> float:
+    retry_success_probability = normalize_probability(retry_success_probability)
+    if retry_success_probability >= 70:
+        return 0.9
+    if retry_success_probability >= 40:
+        return 0.5
+    return 0.2
+
+
+async def cancel_pending_operations(event_id: str, current_operation_id: str):
+    db = get_db()
+    cursor = db.operations.find({
+        "event_id": event_id,
+        "status": "pending",
+        "operation_id": {"$ne": current_operation_id},
+    })
+    async for pending_op in cursor:
+        await db.operations.update_one(
+            {"operation_id": pending_op["operation_id"]},
+            {"$set": {"status": "cancelled", "updated_at": datetime.utcnow().isoformat() + "Z"}}
+        )
+
+
+async def broadcast_retry_result(
+    event_id: str,
+    status: str,
+    message: str,
+    operation_id: str,
+    retry_success_probability: float,
+    new_state: str,
+):
+    await manager.broadcast({
+        "type": "retry_completed" if status == "success" else "retry_failed",
+        "event_id": event_id,
+        "status": status,
+        "message": message,
+        "operation_id": operation_id,
+        "retry_success_probability": retry_success_probability,
+        "delivery_state": new_state,
+        "new_state": new_state,
+    })
 
 
 async def create_operation(
@@ -250,6 +308,84 @@ async def process_operation(operation: Dict[str, Any]) -> Dict[str, Any]:
 
     ml_result = ml_scorer.get_full_prediction(event, attempts_list, endpoint)
     analysis = intelligence_engine.analyze(event, attempts_list, endpoint)
+
+    retry_success_probability = ml_scorer.get_retry_success_probability(event, attempts_list, endpoint)
+
+    if op_type == "retry":
+        normalized_retry_probability = normalize_probability(retry_success_probability)
+        retry_succeeded = normalized_retry_probability > 70
+
+        if retry_succeeded:
+            execution_success_probability = 1.0
+        else:
+            execution_success_probability = 0.3
+            retry_succeeded = random.random() < execution_success_probability
+
+        if retry_succeeded:
+            delivery_state = "recovered"
+            http_status = 200
+            response_category = "success"
+            operation_status = "completed"
+            result_message = "Retry recovered successfully"
+            broadcast_status = "success"
+        else:
+            delivery_state = "failed"
+            http_status = 500
+            response_category = "server_error"
+            operation_status = "failed"
+            result_message = "Retry failed"
+            broadcast_status = "failed"
+
+        response_time = random.randint(80, 450)
+        processed_at = datetime.utcnow().isoformat() + "Z"
+        retry_attempt_doc = {
+            "attempt_id": f"ATT_{uuid.uuid4().hex[:12].upper()}",
+            "event_id": event_id,
+            "endpoint_id": endpoint_id,
+            "status": "success" if retry_succeeded else "failed",
+            "retry_attempt": attempt_number,
+            "processed_at": processed_at,
+            "latency_ms": response_time,
+            "http_status": http_status,
+            "response_body_category": response_category,
+            "attempt_number": attempt_number,
+            "attempted_at": processed_at,
+            "response_time_ms": response_time,
+            "timeout": False,
+            "signature_valid": True,
+            "retry_scheduled": False,
+        }
+        await db.delivery_attempts.insert_one(retry_attempt_doc.copy())
+
+        await update_event_delivery_status(event_id, delivery_state, "success" if retry_succeeded else "failed")
+
+        await db.operations.update_one(
+            {"operation_id": op_id},
+            {"$set": {
+                "status": operation_status,
+                "result": {
+                    "status": broadcast_status,
+                    "http_status": http_status,
+                    "delivery_state": delivery_state,
+                    "attempt_id": retry_attempt_doc["attempt_id"],
+                    "retry_success_probability": retry_success_probability,
+                    "execution_success_probability": execution_success_probability,
+                },
+                "updated_at": datetime.utcnow().isoformat() + "Z",
+            }}
+        )
+
+        await cancel_pending_operations(event_id, op_id)
+        await broadcast_retry_result(
+            event_id=event_id,
+            status=broadcast_status,
+            message=result_message,
+            operation_id=op_id,
+            retry_success_probability=retry_success_probability,
+            new_state=delivery_state,
+        )
+
+        return {"status": operation_status, "delivery_state": delivery_state, "retry_success_probability": retry_success_probability}
 
     if SIMULATE_DELIVERY:
         delivery_result = await simulate_delivery(endpoint)
@@ -420,6 +556,7 @@ async def trigger_retry(event_id: str) -> Dict[str, Any]:
     ml_result = ml_scorer.get_full_prediction(event, attempts, endpoint)
     strategy = pick_backoff_strategy(ml_result)
     backoff_seconds = compute_backoff(strategy, 1)
+    retry_success_probability = ml_scorer.get_retry_success_probability(event, attempts, endpoint)
 
     next_time = datetime.utcnow() + timedelta(seconds=backoff_seconds)
     operation = await create_operation(
@@ -440,6 +577,7 @@ async def trigger_retry(event_id: str) -> Dict[str, Any]:
         "operation_type": "retry",
         "scheduled_at": operation["scheduled_at"],
         "backoff_seconds": backoff_seconds,
+        "retry_success_probability": retry_success_probability,
     }
 
 

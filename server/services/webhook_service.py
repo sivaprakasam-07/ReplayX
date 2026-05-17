@@ -31,17 +31,18 @@ async def get_all_events(limit: int = 50, skip: int = 0) -> dict:
     events = await cursor.to_list(length=limit)
     for event in events:
         event["_id"] = str(event["_id"])
-        
-        # Look up the latest attempt to find the true status
-        latest_attempt = await db.delivery_attempts.find_one(
-            {"event_id": event["event_id"]},
-            sort=[("attempt_number", -1)]
-        )
-        if latest_attempt:
-            status_code = latest_attempt.get("http_status", 200)
-            event["delivery_state"] = "failed" if status_code >= 400 else "success"
-        else:
-            event["delivery_state"] = "success"
+
+        # Trust the persisted event document first; retry success updates it directly.
+        if not event.get("delivery_state"):
+            latest_attempt = await db.delivery_attempts.find_one(
+                {"event_id": event["event_id"]},
+                sort=[("attempted_at", -1), ("attempt_number", -1)]
+            )
+            if latest_attempt:
+                status_code = latest_attempt.get("http_status", 200)
+                event["delivery_state"] = "failed" if status_code >= 400 else "success"
+            else:
+                event["delivery_state"] = "success"
             
     return {
         "total": total,

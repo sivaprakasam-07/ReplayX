@@ -1,26 +1,35 @@
 import { useEffect, useState } from "react"
+import toast from "react-hot-toast"
 import MetricCard from "../components/cards/MetricCard"
 import RetryTimelineChart from "../components/charts/RetryTimelineChart"
 import RetryTable from "../components/tables/RetryTable"
 import StatusPill from "../components/common/StatusPill"
+import EventToast from "../components/common/EventToast"
 import { getRetryAnalytics, triggerRetry, getOperationsQueue, processPendingOperations } from "../services/api/retryApi"
+import { subscribeToRealtimeEvents, isRetryLifecycleMessage } from "../services/socket"
 
 const RetryAnalysis = () => {
+    // fallback dedupe for environments where toast.isActive is unavailable
+    const activeToastIds = new Set()
     const [data, setData] = useState(null)
     const [loading, setLoading] = useState(true)
     const [queue, setQueue] = useState([])
     const [triggerMsg, setTriggerMsg] = useState(null)
     const [triggerLoading, setTriggerLoading] = useState(false)
 
-    const fetchData = async () => {
-        setLoading(true)
+    const fetchData = async ({ silent = false } = {}) => {
         try {
+            if (!silent) {
+                setLoading(true)
+            }
             const result = await getRetryAnalytics()
             setData(result)
         } catch (e) {
             console.error(e)
         } finally {
-            setLoading(false)
+            if (!silent) {
+                setLoading(false)
+            }
         }
     }
 
@@ -34,10 +43,51 @@ const RetryAnalysis = () => {
     }
 
     useEffect(() => {
-        fetchData()
-        fetchQueue()
+        const loadInitialData = async () => {
+            await Promise.all([
+                fetchData(),
+                fetchQueue(),
+            ])
+        }
+
+        loadInitialData()
+
+        const unsubscribe = subscribeToRealtimeEvents(async (message) => {
+            if (!isRetryLifecycleMessage(message)) {
+                return
+            }
+
+            const idParts = [message.type, message.operation_id || message.event_id || message.id || "unknown"].filter(Boolean)
+            const toastId = idParts.join("-")
+
+            const hasIsActive = typeof toast.isActive === "function"
+            const already = hasIsActive ? toast.isActive(toastId) : activeToastIds.has(toastId)
+
+            if (!already) {
+                if (!hasIsActive) {
+                    activeToastIds.add(toastId)
+                    setTimeout(() => activeToastIds.delete(toastId), 3500)
+                }
+
+                toast.custom(() => (
+                    <EventToast
+                        type={message.status === "success" ? "success" : "error"}
+                        message={message.message || (message.status === "success" ? "Retry completed successfully" : "Retry failed")}
+                    />
+                ), { id: toastId, duration: 3000 })
+            }
+
+            await Promise.all([
+                fetchData({ silent: true }),
+                fetchQueue(),
+            ])
+        })
+
         const interval = setInterval(fetchQueue, 10000)
-        return () => clearInterval(interval)
+        return () => {
+            clearInterval(interval)
+            unsubscribe()
+        }
     }, [])
 
     const handleTriggerRetry = async () => {
@@ -47,7 +97,8 @@ const RetryAnalysis = () => {
         if (!eventId) { setTriggerLoading(false); return }
         try {
             const result = await triggerRetry(eventId)
-            setTriggerMsg({ type: "success", text: `Retry scheduled! Op: ${result.operation_id}` })
+            const probability = Math.round(result.retry_success_probability ?? 0)
+            setTriggerMsg({ type: "success", text: `Retry scheduled! ML success probability: ${probability}%` })
             fetchQueue()
         } catch (e) {
             setTriggerMsg({ type: "error", text: `Failed: ${e.message}` })
@@ -111,9 +162,8 @@ const RetryAnalysis = () => {
             </div>
 
             {triggerMsg && (
-                <div className={`px-4 py-3 rounded-xl text-sm font-medium ${
-                    triggerMsg.type === "success" ? "bg-[#DCFCE7] text-[#15803D]" : "bg-[#FEE2E2] text-[#DC2626]"
-                }`}>
+                <div className={`px-4 py-3 rounded-xl text-sm font-medium ${triggerMsg.type === "success" ? "bg-[#DCFCE7] text-[#15803D]" : "bg-[#FEE2E2] text-[#DC2626]"
+                    }`}>
                     {triggerMsg.text}
                 </div>
             )}
@@ -137,11 +187,10 @@ const RetryAnalysis = () => {
                     <h3 className="text-lg font-bold text-[#1F2937] mb-4">ML Detected Failure Patterns</h3>
                     <div className="flex flex-wrap gap-3">
                         {patterns.map((p, i) => (
-                            <div key={i} className={`rounded-xl px-4 py-3 border ${
-                                p.severity === "high" ? "bg-[#FEE2E2] border-red-200" :
+                            <div key={i} className={`rounded-xl px-4 py-3 border ${p.severity === "high" ? "bg-[#FEE2E2] border-red-200" :
                                 p.severity === "medium" ? "bg-[#FEF3C7] border-yellow-200" :
-                                "bg-[#DCFCE7] border-green-200"
-                            }`}>
+                                    "bg-[#DCFCE7] border-green-200"
+                                }`}>
                                 <p className="text-sm font-semibold">{p.pattern}</p>
                                 <p className="text-xs mt-1 opacity-75">Severity: {p.severity}{p.count != null ? ` (${p.count})` : ""}</p>
                             </div>

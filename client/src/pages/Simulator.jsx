@@ -1,7 +1,11 @@
 import { useEffect, useRef, useState } from "react"
 import { motion, AnimatePresence } from "framer-motion"
-
 import { triggerSimulation } from "../services/api/simulatorApi"
+import toast from "react-hot-toast"
+import { subscribeToRealtimeEvents, isRetryLifecycleMessage } from "../services/socket"
+
+// fallback dedupe set when toast.isActive isn't available
+const activeToastIds = new Set()
 
 const Simulator = () => {
 
@@ -59,6 +63,43 @@ const Simulator = () => {
                 data.message
             )
 
+            try {
+                const idKey = data.operation_id || data.event_id || `${Date.now()}`
+                const toastId = `sim-${type}-${idKey}`
+
+                const hasIsActive = typeof toast.isActive === "function"
+                const already = hasIsActive ? toast.isActive(toastId) : activeToastIds.has(toastId)
+
+                if (!already) {
+                    if (!hasIsActive) {
+                        activeToastIds.add(toastId)
+                        setTimeout(() => activeToastIds.delete(toastId), 3500)
+                    }
+
+                    if (type === "success") {
+                        toast.success(data.message || "Webhook success event triggered", { id: toastId })
+                    } else if (type === "failure") {
+                        toast.error(data.message || "Webhook failure event triggered", { id: toastId })
+                    } else if (type === "retry") {
+                        toast((t) => (
+                            <div className="p-2">
+                                <div className="font-semibold">Retry simulation scheduled</div>
+                                <div className="text-sm">{data.message}</div>
+                            </div>
+                        ), { id: toastId })
+                    } else if (type === "replay") {
+                        toast((t) => (
+                            <div className="p-2">
+                                <div className="font-semibold">Replay simulation scheduled</div>
+                                <div className="text-sm">{data.message}</div>
+                            </div>
+                        ), { id: toastId })
+                    }
+                }
+            } catch (e) {
+                console.error("Toast error", e)
+            }
+
         } catch (error) {
 
             console.error(
@@ -88,6 +129,33 @@ const Simulator = () => {
         })
 
     }, [logs])
+
+    useEffect(() => {
+        const unsubscribe = subscribeToRealtimeEvents((message) => {
+            if (!isRetryLifecycleMessage(message)) return
+
+            const idParts = [message.type, message.operation_id || message.event_id || message.id || "unknown"].filter(Boolean)
+            const toastId = idParts.join("-")
+
+            const hasIsActive = typeof toast.isActive === "function"
+            const already = hasIsActive ? toast.isActive(toastId) : activeToastIds.has(toastId)
+
+            if (!already) {
+                if (!hasIsActive) {
+                    activeToastIds.add(toastId)
+                    setTimeout(() => activeToastIds.delete(toastId), 3500)
+                }
+
+                if (message.status === "success") {
+                    toast.success(message.message || "Retry completed successfully", { id: toastId })
+                } else {
+                    toast.error(message.message || "Retry failed", { id: toastId })
+                }
+            }
+        })
+
+        return () => unsubscribe()
+    }, [])
 
     return (
         <div className="space-y-8">
@@ -253,12 +321,12 @@ const Simulator = () => {
 
                                     <div
                                         className={`w-3 h-3 rounded-full mt-1.5 ${log.type === "success"
-                                                ? "bg-[#8FAF9F]"
-                                                : log.type === "failed"
-                                                    ? "bg-red-500"
-                                                    : log.type === "retry"
-                                                        ? "bg-amber-500"
-                                                        : "bg-[#5B6CFF]"
+                                            ? "bg-[#8FAF9F]"
+                                            : log.type === "failed"
+                                                ? "bg-red-500"
+                                                : log.type === "retry"
+                                                    ? "bg-amber-500"
+                                                    : "bg-[#5B6CFF]"
                                             }`}
                                     ></div>
 
