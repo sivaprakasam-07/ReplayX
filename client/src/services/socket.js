@@ -1,12 +1,16 @@
 const DEFAULT_WS_URL = "ws://127.0.0.1:8000/ws/events"
+const POLL_INTERVAL = 5000
 
 let socket = null
 let reconnectTimer = null
+let pollTimer = null
 const subscribers = new Set()
 const statusListeners = new Set()
 let currentStatus = "disconnected"
+let isPolling = false
 
 const getWebSocketUrl = () => import.meta.env.VITE_WS_URL || DEFAULT_WS_URL
+const getApiBase = () => import.meta.env.VITE_API_BASE_URL || "http://127.0.0.1:8000"
 
 const notifyStatus = (status) => {
     currentStatus = status
@@ -41,6 +45,51 @@ const dispatchMessage = (message) => {
     })
 }
 
+// --- Polling fallback for Render free tier (no WebSocket) ---
+const seenEventIds = new Set()
+
+const startPollingFallback = () => {
+    if (pollTimer) return
+    isPolling = true
+    notifyStatus("connected")
+
+    const poll = async () => {
+        if (subscribers.size === 0) return
+        try {
+            const res = await fetch(`${getApiBase()}/api/v1/events?limit=10`)
+            const data = await res.json()
+            const events = data.events || data || []
+            if (Array.isArray(events)) {
+                events.forEach((evt) => {
+                    if (!evt.event_id) return
+                    if (!seenEventIds.has(evt.event_id)) {
+                        seenEventIds.add(evt.event_id)
+                        dispatchMessage({
+                            type: "poll_event",
+                            event_id: evt.event_id,
+                            data: { event: evt },
+                        })
+                    }
+                })
+            }
+        } catch (e) {
+            console.warn("[socket] polling error:", e)
+        }
+    }
+
+    poll()
+    pollTimer = setInterval(poll, POLL_INTERVAL)
+}
+
+const stopPollingFallback = () => {
+    if (pollTimer) {
+        clearInterval(pollTimer)
+        pollTimer = null
+    }
+    isPolling = false
+}
+// --- End polling fallback ---
+
 const connect = () => {
     if (socket && (socket.readyState === WebSocket.OPEN || socket.readyState === WebSocket.CONNECTING)) {
         return socket
@@ -66,21 +115,26 @@ const connect = () => {
 
     socket.onopen = () => {
         console.info('[socket] connected to', getWebSocketUrl())
+        stopPollingFallback()
         notifyStatus("connected")
     }
 
-    socket.onerror = (error) => {
-        console.error("WebSocket error:", error)
+    socket.onerror = () => {
+        if (!isPolling && subscribers.size > 0) {
+            startPollingFallback()
+        }
     }
 
     socket.onclose = () => {
         socket = null
-        notifyStatus("disconnected")
-        if (subscribers.size > 0) {
-            reconnectTimer = window.setTimeout(() => {
-                reconnectTimer = null
-                connect()
-            }, 3000)
+        if (!isPolling) {
+            notifyStatus("disconnected")
+            if (subscribers.size > 0) {
+                reconnectTimer = window.setTimeout(() => {
+                    reconnectTimer = null
+                    connect()
+                }, 3000)
+            }
         }
     }
 
@@ -108,6 +162,8 @@ export const subscribeToRealtimeEvents = (handler) => {
                 }
                 socket = null
             }
+
+            stopPollingFallback()
         }
     }
 }
@@ -120,3 +176,5 @@ export const subscribeToConnectionStatus = (callback) => {
 
 export const isRetryLifecycleMessage = (message) =>
     message?.type === "retry_completed" || message?.type === "retry_failed"
+
+export const isPollingFallback = () => isPolling
