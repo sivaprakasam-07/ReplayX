@@ -1,3 +1,5 @@
+import React from "react"
+
 const StatusPill = ({
     status,
 }) => {
@@ -82,4 +84,4 @@ const StatusPill = ({
     )
 }
 
-export default StatusPill
+export default React.memo(StatusPill)

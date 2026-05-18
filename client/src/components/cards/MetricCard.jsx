@@ -1,3 +1,4 @@
+import React from "react"
 import { useEffect, useRef, useState } from "react"
 import { motion } from "framer-motion"
 
@@ -83,4 +84,4 @@ const MetricCard = ({ title, value, change, status, loading = false }) => {
     )
 }
 
-export default MetricCard
+export default React.memo(MetricCard)

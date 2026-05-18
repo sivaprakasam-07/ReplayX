@@ -7,11 +7,18 @@ from models.schemas import (
 from database import get_db
 from services.ml_integration import ml_scorer
 from services.retry_intelligence import intelligence_engine
+from services.cache import get_cache, set_cache, cache_key
 
 router = APIRouter(prefix="/api/v1", tags=["Dashboard & Analytics"])
 
 @router.get("/dashboard/metrics", response_model=DashboardMetrics)
 async def get_dashboard_metrics():
+    # Check cache first
+    cache_id = cache_key("dashboard_metrics")
+    cached = get_cache(cache_id)
+    if cached is not None:
+        return cached
+    
     db = get_db()
     total_events = await db.events.count_documents({})
     failed_deliveries = await db.delivery_attempts.count_documents({"http_status": {"$gte": 400}})
@@ -28,7 +35,7 @@ async def get_dashboard_metrics():
     latency_result = await cursor.to_list(length=1)
     avg_latency = latency_result[0]["avg_latency"] if latency_result else 0.0
     
-    return DashboardMetrics(
+    result = DashboardMetrics(
         total_events=total_events,
         failed_deliveries=failed_deliveries,
         retry_success_rate=round(retry_success_rate, 1),
@@ -36,9 +43,19 @@ async def get_dashboard_metrics():
         critical_endpoints=critical_endpoints,
         avg_latency_ms=round(avg_latency, 1)
     )
+    
+    # Cache the result for 12 seconds
+    set_cache(cache_id, result)
+    return result
 
 @router.get("/retries/analytics", response_model=EnrichedRetryAnalyticsResponse)
 async def get_retry_analytics(limit: int = 10, skip: int = 0):
+    # Check cache first
+    cache_id = cache_key("retries_analytics", limit=limit, skip=skip)
+    cached = get_cache(cache_id)
+    if cached is not None:
+        return cached
+    
     db = get_db()
     
     pipeline = [
@@ -123,7 +140,7 @@ async def get_retry_analytics(limit: int = 10, skip: int = 0):
             "failure_pattern": patterns[0]["pattern"] if patterns else "normal",
         })
     
-    return {
+    result = {
         "timeline": timeline,
         "summary": {
             "total_retries": total_retries,
@@ -135,6 +152,9 @@ async def get_retry_analytics(limit: int = 10, skip: int = 0):
         "retry_events": retry_events,
         "total_retry_events": total_retries,
     }
+    # Cache the result for 12 seconds
+    set_cache(cache_id, result)
+    return result
 
 @router.get("/endpoints/health", response_model=List[EndpointHealth])
 async def get_endpoints_health():
@@ -158,6 +178,12 @@ async def get_endpoints_health():
 
 @router.get("/replay/recommendations", response_model=List[EnrichedReplayRecommendation])
 async def get_replay_recommendations(limit: int = 10, skip: int = 0):
+    # Check cache first
+    cache_id = cache_key("replay_recommendations", limit=limit, skip=skip)
+    cached = get_cache(cache_id)
+    if cached is not None:
+        return cached
+    
     db = get_db()
     
     pipeline = [
@@ -170,18 +196,48 @@ async def get_replay_recommendations(limit: int = 10, skip: int = 0):
     cursor = db.delivery_attempts.aggregate(pipeline)
     groups = await cursor.to_list(length=limit)
     
+    if not groups:
+        set_cache(cache_id, [])
+        return []
+    
+    # Batch fetch all events and endpoints at once (avoid N+1 queries)
+    event_ids = [g["_id"] for g in groups]
+    events_cursor = db.events.find({"event_id": {"$in": event_ids}})
+    events_list = await events_cursor.to_list(length=len(event_ids))
+    events_map = {e["event_id"]: e for e in events_list}
+    
+    # Batch fetch all attempts for these events
+    attempts_cursor = db.delivery_attempts.find({"event_id": {"$in": event_ids}}).sort("attempt_number", 1)
+    all_attempts = await attempts_cursor.to_list(length=len(event_ids) * 10)
+    attempts_by_event = {}
+    for att in all_attempts:
+        event_id = att["event_id"]
+        if event_id not in attempts_by_event:
+            attempts_by_event[event_id] = []
+        attempts_by_event[event_id].append(att)
+    
+    # Batch fetch all endpoints
+    endpoint_ids = set()
+    for attempts_list in attempts_by_event.values():
+        if attempts_list:
+            endpoint_ids.add(attempts_list[0].get("endpoint_id", ""))
+    endpoint_ids.discard("")
+    
+    endpoints_cursor = db.endpoints.find({"endpoint_id": {"$in": list(endpoint_ids)}})
+    endpoints_list = await endpoints_cursor.to_list(length=len(endpoint_ids))
+    endpoints_map = {e["endpoint_id"]: e for e in endpoints_list}
+    
+    # Now process with pre-fetched data (no more queries in loop)
     recommendations = []
     for g in groups:
         event_id = g["_id"]
-        attempts_list = await db.delivery_attempts.find(
-            {"event_id": event_id}
-        ).sort("attempt_number", 1).to_list(length=10)
+        attempts_list = attempts_by_event.get(event_id, [])
         if not attempts_list:
             continue
         
-        event_obj = await db.events.find_one({"event_id": event_id}) or {}
+        event_obj = events_map.get(event_id, {})
         endpoint_id = attempts_list[0].get("endpoint_id", "")
-        ep = await db.endpoints.find_one({"endpoint_id": endpoint_id}) if endpoint_id else {}
+        ep = endpoints_map.get(endpoint_id, {})
         
         intelligence_result = intelligence_engine.analyze(event_obj, attempts_list, ep or {})
         ml_result = ml_scorer.get_full_prediction(event_obj, attempts_list, ep or {})
@@ -201,5 +257,7 @@ async def get_replay_recommendations(limit: int = 10, skip: int = 0):
             ml_confidence=ai_conf,
             failure_patterns=[FailurePattern(**p) for p in patterns],
         ))
-        
+    
+    # Cache the result for 12 seconds
+    set_cache(cache_id, recommendations)
     return recommendations

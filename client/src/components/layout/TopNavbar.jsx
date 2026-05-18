@@ -1,3 +1,5 @@
+import React from "react"
+
 const TopNavbar = () => {
     return (
         <div className="h-20 border-b border-[#E5E7EB] bg-white px-8 flex items-center justify-between shadow-[0_1px_0_rgba(255,255,255,0.8)]">
@@ -15,4 +17,4 @@ const TopNavbar = () => {
     )
 }
 
-export default TopNavbar
+export default React.memo(TopNavbar)

@@ -1,3 +1,4 @@
+import React from "react"
 import StatusPill from "../common/StatusPill"
 import { motion, AnimatePresence } from "framer-motion"
 
@@ -96,10 +97,10 @@ const EventTable = ({ events = [], onSelectEvent }) => {
                                         <td className="px-6 py-4">
                                             {event.risk_score != null ? (
                                                 <span className={`inline-flex items-center px-3 py-1 rounded-full text-xs font-semibold ${event.risk_score > 0.7
-                                                        ? "bg-[#FEE2E2] text-[#DC2626]"
-                                                        : event.risk_score > 0.3
-                                                            ? "bg-[#FEF3C7] text-[#D97706]"
-                                                            : "bg-[#DCFCE7] text-[#15803D]"
+                                                    ? "bg-[#FEE2E2] text-[#DC2626]"
+                                                    : event.risk_score > 0.3
+                                                        ? "bg-[#FEF3C7] text-[#D97706]"
+                                                        : "bg-[#DCFCE7] text-[#15803D]"
                                                     }`}>
                                                     {(event.risk_score * 100).toFixed(0)}
                                                 </span>
@@ -139,4 +140,4 @@ const EventTable = ({ events = [], onSelectEvent }) => {
     )
 }
 
-export default EventTable
+export default React.memo(EventTable)

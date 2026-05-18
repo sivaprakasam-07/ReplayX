@@ -1,3 +1,5 @@
+import React from "react"
+
 const HealthCard = ({
     title,
     value,
@@ -22,4 +24,4 @@ const HealthCard = ({
     )
 }
 
-export default HealthCard
+export default React.memo(HealthCard)

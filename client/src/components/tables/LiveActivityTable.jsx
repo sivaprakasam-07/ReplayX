@@ -1,3 +1,4 @@
+import React from "react"
 import { activityData } from "../../data/activityData"
 import StatusPill from "../common/StatusPill"
 
@@ -42,4 +43,4 @@ const LiveActivityTable = ({ activities = null }) => {
     )
 }
 
-export default LiveActivityTable
+export default React.memo(LiveActivityTable)

@@ -7,6 +7,7 @@ import {
     Tooltip,
     CartesianGrid,
 } from "recharts"
+import React from "react"
 
 import { deliveryData } from "../../data/deliveryData"
 
@@ -127,4 +128,4 @@ const DeliveryTrafficChart = ({ data = null }) => {
     )
 }
 
-export default DeliveryTrafficChart
+export default React.memo(DeliveryTrafficChart)

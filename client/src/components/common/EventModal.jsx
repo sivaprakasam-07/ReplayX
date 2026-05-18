@@ -1,4 +1,5 @@
 import { motion, AnimatePresence } from "framer-motion"
+import React from "react"
 
 const EventModal = ({
     isOpen,
@@ -254,13 +255,12 @@ const EventModal = ({
                                         <p className="text-xs text-[#6B7280] mb-2">Detected Patterns</p>
                                         <div className="flex flex-wrap gap-2">
                                             {analysis.failure_patterns.map((fp, i) => (
-                                                <span key={i} className={`inline-flex items-center px-3 py-1 rounded-full text-xs font-semibold ${
-                                                    fp.severity === "high"
+                                                <span key={i} className={`inline-flex items-center px-3 py-1 rounded-full text-xs font-semibold ${fp.severity === "high"
                                                         ? "bg-[#FEE2E2] text-[#DC2626]"
                                                         : fp.severity === "medium"
                                                             ? "bg-[#FEF3C7] text-[#D97706]"
                                                             : "bg-[#DCFCE7] text-[#15803D]"
-                                                }`}>
+                                                    }`}>
                                                     {fp.pattern}
                                                 </span>
                                             ))}

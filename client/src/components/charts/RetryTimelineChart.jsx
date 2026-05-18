@@ -1,3 +1,4 @@
+import React from "react"
 import {
     ResponsiveContainer,
     LineChart,
@@ -101,4 +102,4 @@ const RetryTimelineChart = ({ data, predictedData }) => {
     )
 }
 
-export default RetryTimelineChart
+export default React.memo(RetryTimelineChart)

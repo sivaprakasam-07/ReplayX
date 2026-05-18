@@ -1,5 +1,7 @@
 import StatusPill from "../common/StatusPill"
 
+import React from "react"
+
 const ReplayTable = ({ replays }) => {
 
     return (
@@ -76,13 +78,12 @@ const ReplayTable = ({ replays }) => {
 
                             <td className="px-6 py-4">
                                 {replay.ml_confidence != null ? (
-                                    <span className={`inline-flex items-center px-3 py-1 rounded-full text-xs font-semibold ${
-                                        replay.ml_confidence > 80
+                                    <span className={`inline-flex items-center px-3 py-1 rounded-full text-xs font-semibold ${replay.ml_confidence > 80
                                             ? "bg-[#DCFCE7] text-[#15803D]"
                                             : replay.ml_confidence > 60
                                                 ? "bg-[#FEF3C7] text-[#D97706]"
                                                 : "bg-[#FEE2E2] text-[#DC2626]"
-                                    }`}>
+                                        }`}>
                                         {replay.ml_confidence}%
                                     </span>
                                 ) : (
@@ -102,4 +103,4 @@ const ReplayTable = ({ replays }) => {
     )
 }
 
-export default ReplayTable
+export default React.memo(ReplayTable)

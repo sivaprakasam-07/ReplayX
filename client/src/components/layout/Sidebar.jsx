@@ -10,6 +10,7 @@ import {
 
 import { NavLink } from "react-router-dom"
 import { motion } from "framer-motion"
+import React from "react"
 
 const navItems = [
     {
@@ -109,4 +110,4 @@ const Sidebar = () => {
     )
 }
 
-export default Sidebar
+export default React.memo(Sidebar)

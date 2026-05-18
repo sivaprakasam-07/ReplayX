@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react"
+import { useEffect, useState, useMemo } from "react"
 
 import MetricCard from "../components/cards/MetricCard"
 import ReplayTable from "../components/tables/ReplayTable"
@@ -59,29 +59,28 @@ const ReplayCenter = () => {
         }
     }
 
-    const safeReplays = replays.filter((r) => r.safe_to_replay).length
-    const blockedReplays = replays.filter((r) => !r.safe_to_replay).length
-    const highRisks = replays.filter((r) => r.risk_level === "high").length
-    const replayConfidence = replays.length
-        ? Math.round((safeReplays / replays.length) * 100)
-        : 0
-
-    const avgMlConfidence = replays.length
-        ? Math.round(
-            replays.filter(r => r.ml_confidence != null).reduce((a, r) => a + r.ml_confidence, 0) /
-            Math.max(replays.filter(r => r.ml_confidence != null).length, 1)
-        )
-        : 0
-
-    const patternCounts = {}
-    replays.forEach(r => {
-        const patterns = r.failure_patterns || []
-        patterns.forEach(p => {
-            const key = typeof p === "string" ? p : p.pattern
-            patternCounts[key] = (patternCounts[key] || 0) + 1
+    const { safeReplays, blockedReplays, highRisks, replayConfidence, avgMlConfidence, topPatterns } = useMemo(() => {
+        const safe = replays.filter((r) => r.safe_to_replay).length
+        const blocked = replays.filter((r) => !r.safe_to_replay).length
+        const high = replays.filter((r) => r.risk_level === "high").length
+        const conf = replays.length ? Math.round((safe / replays.length) * 100) : 0
+        const avgConf = replays.length
+            ? Math.round(
+                replays.filter(r => r.ml_confidence != null).reduce((a, r) => a + r.ml_confidence, 0) /
+                Math.max(replays.filter(r => r.ml_confidence != null).length, 1)
+            )
+            : 0
+        const patterns = {}
+        replays.forEach(r => {
+            const failurePatterns = r.failure_patterns || []
+            failurePatterns.forEach(p => {
+                const key = typeof p === "string" ? p : p.pattern
+                patterns[key] = (patterns[key] || 0) + 1
+            })
         })
-    })
-    const topPatterns = Object.entries(patternCounts).sort((a, b) => b[1] - a[1]).slice(0, 4)
+        const top = Object.entries(patterns).sort((a, b) => b[1] - a[1]).slice(0, 4)
+        return { safeReplays: safe, blockedReplays: blocked, highRisks: high, replayConfidence: conf, avgMlConfidence: avgConf, topPatterns: top }
+    }, [replays])
 
     return (
         <div className="space-y-8">
@@ -98,9 +97,8 @@ const ReplayCenter = () => {
             </div>
 
             {execMsg && (
-                <div className={`px-4 py-3 rounded-xl text-sm font-medium ${
-                    execMsg.type === "success" ? "bg-[#DCFCE7] text-[#15803D]" : "bg-[#FEE2E2] text-[#DC2626]"
-                }`}>
+                <div className={`px-4 py-3 rounded-xl text-sm font-medium ${execMsg.type === "success" ? "bg-[#DCFCE7] text-[#15803D]" : "bg-[#FEE2E2] text-[#DC2626]"
+                    }`}>
                     {execMsg.text}
                 </div>
             )}
@@ -157,11 +155,10 @@ const ReplayCenter = () => {
                                             <h3 className={`text-lg font-semibold ${replay.safe_to_replay ? "text-green-700" : "text-red-700"}`}>
                                                 {replay.safe_to_replay ? "Safe Replay Recommended" : "Replay Blocked"}
                                             </h3>
-                                            <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${
-                                                replay.risk_level === "high" ? "bg-red-200 text-red-800" :
-                                                replay.risk_level === "medium" ? "bg-yellow-200 text-yellow-800" :
-                                                "bg-green-200 text-green-800"
-                                            }`}>{replay.risk_level}</span>
+                                            <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${replay.risk_level === "high" ? "bg-red-200 text-red-800" :
+                                                    replay.risk_level === "medium" ? "bg-yellow-200 text-yellow-800" :
+                                                        "bg-green-200 text-green-800"
+                                                }`}>{replay.risk_level}</span>
                                         </div>
                                         <p className={`text-sm ${replay.safe_to_replay ? "text-green-600" : "text-red-600"}`}>
                                             {replay.recommended_action}
@@ -170,22 +167,20 @@ const ReplayCenter = () => {
                                     </div>
                                     <div className="flex flex-col items-end gap-2 ml-4">
                                         {(replay.ml_confidence != null && replay.ml_confidence > 0) && (
-                                            <span className={`inline-flex items-center px-3 py-1 rounded-full text-xs font-semibold ${
-                                                replay.ml_confidence > 80 ? "bg-green-200 text-green-800" :
-                                                replay.ml_confidence > 60 ? "bg-yellow-200 text-yellow-800" :
-                                                "bg-red-200 text-red-800"
-                                            }`}>
+                                            <span className={`inline-flex items-center px-3 py-1 rounded-full text-xs font-semibold ${replay.ml_confidence > 80 ? "bg-green-200 text-green-800" :
+                                                    replay.ml_confidence > 60 ? "bg-yellow-200 text-yellow-800" :
+                                                        "bg-red-200 text-red-800"
+                                                }`}>
                                                 ML {replay.ml_confidence}%
                                             </span>
                                         )}
                                         <button
                                             onClick={() => handleExecuteReplay(replay.event_id)}
                                             disabled={execLoading || !replay.safe_to_replay}
-                                            className={`px-3 py-1.5 rounded-xl text-xs font-semibold ${
-                                                replay.safe_to_replay
+                                            className={`px-3 py-1.5 rounded-xl text-xs font-semibold ${replay.safe_to_replay
                                                     ? "bg-[#1F2937] text-white hover:bg-[#374151]"
                                                     : "bg-[#E5E7EB] text-[#9CA3AF] cursor-not-allowed"
-                                            } disabled:opacity-50`}
+                                                } disabled:opacity-50`}
                                         >
                                             {execLoading ? "..." : replay.safe_to_replay ? "Execute Replay" : "Blocked"}
                                         </button>
@@ -228,11 +223,10 @@ const ReplayCenter = () => {
                                     {topPatterns.map(([pattern, count]) => (
                                         <div key={pattern} className="flex items-center justify-between">
                                             <span className="text-sm text-[#1F2937]">{pattern}</span>
-                                            <span className={`text-xs font-semibold px-2 py-0.5 rounded ${
-                                                count > 2 ? "bg-[#FEE2E2] text-[#DC2626]" :
-                                                count > 1 ? "bg-[#FEF3C7] text-[#D97706]" :
-                                                "bg-[#DCFCE7] text-[#15803D]"
-                                            }`}>{count}</span>
+                                            <span className={`text-xs font-semibold px-2 py-0.5 rounded ${count > 2 ? "bg-[#FEE2E2] text-[#DC2626]" :
+                                                    count > 1 ? "bg-[#FEF3C7] text-[#D97706]" :
+                                                        "bg-[#DCFCE7] text-[#15803D]"
+                                                }`}>{count}</span>
                                         </div>
                                     ))}
                                 </div>

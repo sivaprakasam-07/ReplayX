@@ -5,6 +5,7 @@ import {
     Cell,
     Tooltip,
 } from "recharts"
+import React from "react"
 
 const COLORS = [
     "#15803D",
@@ -80,4 +81,4 @@ const EndpointHealthChart = ({
     )
 }
 
-export default EndpointHealthChart
+export default React.memo(EndpointHealthChart)

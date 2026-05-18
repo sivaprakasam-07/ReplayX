@@ -1,3 +1,4 @@
+import React from "react"
 import StatusPill from "../common/StatusPill"
 
 const defaultEvents = [
@@ -80,13 +81,12 @@ const RetryTable = ({ events }) => {
 
                             <td className="px-6 py-4">
                                 {retry.risk_score != null ? (
-                                    <span className={`inline-flex items-center px-3 py-1 rounded-full text-xs font-semibold ${
-                                        retry.risk_score > 0.7
+                                    <span className={`inline-flex items-center px-3 py-1 rounded-full text-xs font-semibold ${retry.risk_score > 0.7
                                             ? "bg-[#FEE2E2] text-[#DC2626]"
                                             : retry.risk_score > 0.3
                                                 ? "bg-[#FEF3C7] text-[#D97706]"
                                                 : "bg-[#DCFCE7] text-[#15803D]"
-                                    }`}>
+                                        }`}>
                                         {(retry.risk_score * 100).toFixed(0)}
                                     </span>
                                 ) : (
@@ -96,13 +96,12 @@ const RetryTable = ({ events }) => {
 
                             <td className="px-6 py-4">
                                 {retry.failure_pattern ? (
-                                    <span className={`inline-flex items-center px-3 py-1 rounded-full text-xs font-semibold ${
-                                        retry.failure_pattern === "normal"
+                                    <span className={`inline-flex items-center px-3 py-1 rounded-full text-xs font-semibold ${retry.failure_pattern === "normal"
                                             ? "bg-[#DCFCE7] text-[#15803D]"
                                             : retry.failure_pattern.includes("timeout") || retry.failure_pattern.includes("unstable")
                                                 ? "bg-[#FEE2E2] text-[#DC2626]"
                                                 : "bg-[#FEF3C7] text-[#D97706]"
-                                    }`}>
+                                        }`}>
                                         {retry.failure_pattern}
                                     </span>
                                 ) : (
@@ -121,4 +120,4 @@ const RetryTable = ({ events }) => {
     )
 }
 
-export default RetryTable
+export default React.memo(RetryTable)
