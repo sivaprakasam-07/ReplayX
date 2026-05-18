@@ -76,6 +76,18 @@ def _extract_features(
     return features
 
 
+def _normalize_probability(probability: Any, default: float = 50.0) -> float:
+    try:
+        value = float(probability)
+    except (TypeError, ValueError):
+        return default
+
+    if value <= 1:
+        value *= 100
+
+    return max(0.0, min(100.0, value))
+
+
 class MLRiskScorer:
     def __init__(self):
         try:
@@ -102,10 +114,20 @@ class MLRiskScorer:
         risk_map = {"low": 0.2, "medium": 0.5, "high": 0.85}
         base_risk = risk_map.get(risk_level, 0.5)
 
-        prob = result["ml_predictions"]["retry_success_probability"]
+        prob = _normalize_probability(result["ml_predictions"]["retry_success_probability"])
         prob_factor = (100 - prob) / 100
 
         return round((base_risk * 0.6 + prob_factor * 0.4), 2)
+
+    def get_retry_success_probability(
+        self,
+        event: Dict[str, Any],
+        attempts: List[Dict[str, Any]],
+        endpoint: Dict[str, Any]
+    ) -> float:
+        prediction = self.get_full_prediction(event, attempts, endpoint)
+        retry_probability = prediction.get("ml_predictions", {}).get("retry_success_probability", 50)
+        return _normalize_probability(retry_probability)
 
     def get_full_prediction(
         self,

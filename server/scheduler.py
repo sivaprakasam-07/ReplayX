@@ -44,7 +44,12 @@ async def process_pending_operations():
         try:
             logger.info(f"Processing operation {op['operation_id']} [{op['operation_type']}] for event {op['event_id']}")
             result = await process_operation(op)
-            logger.info(f"Operation {op['operation_id']} completed: {result.get('status')}")
+            logger.info(
+                "Operation %s completed: %s (delivery_state=%s)",
+                op["operation_id"],
+                result.get("status"),
+                result.get("delivery_state"),
+            )
         except Exception as e:
             logger.error(f"Failed to process operation {op['operation_id']}: {e}")
             await db.operations.update_one(

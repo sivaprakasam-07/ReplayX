@@ -26,6 +26,7 @@ class TriggerResponse(BaseModel):
     event_id: str
     operation_type: str
     scheduled_at: str
+    retry_success_probability: float | None = None
 
 
 class OperationStatus(BaseModel):
@@ -52,6 +53,7 @@ async def api_trigger_retry(event_id: str):
         event_id=result["event_id"],
         operation_type=result["operation_type"],
         scheduled_at=result["scheduled_at"],
+        retry_success_probability=result.get("retry_success_probability"),
     )
 
 
