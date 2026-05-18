@@ -29,6 +29,9 @@ const Monitoring = () => {
 
     const [modalOpen, setModalOpen] = useState(false)
     const [metrics, setMetrics] = useState(null)
+    const [page, setPage] = useState(0)
+    const [totalEvents, setTotalEvents] = useState(0)
+    const PAGE_SIZE = 25
 
     const fetchMetrics = async () => {
         try {
@@ -39,18 +42,21 @@ const Monitoring = () => {
         }
     }
 
-    const fetchEvents = async ({ silent = false } = {}) => {
+    const fetchEvents = async ({ silent = false, pageOverride } = {}) => {
         try {
             if (!silent) {
                 setLoading(true)
             }
-
-            const data = await getEvents()
+            const currentPage = pageOverride != null ? pageOverride : page
+            const skip = currentPage * PAGE_SIZE
+            const data = await getEvents(PAGE_SIZE, skip)
             const fetched = data?.events || data || []
             const list = Array.isArray(fetched) ? fetched : []
+            const total = data?.total ?? list.length
 
-            if (list.length > 0) {
+            if (list.length > 0 || currentPage === 0) {
                 setEvents(list)
+                setTotalEvents(total)
                 setError(null)
                 try {
                     localStorage.setItem("replayx:monitoring:events", JSON.stringify(list))
@@ -97,12 +103,13 @@ const Monitoring = () => {
             const cached = readStored()
             if (cached.length > 0) setEvents(cached)
 
-            const list = await fetchEvents()
+            const [list] = await Promise.all([
+                fetchEvents(),
+                fetchMetrics(),
+            ])
             if (list.length === 0 && cached.length > 0) {
                 setEvents(cached)
             }
-
-            await fetchMetrics()
 
             const unsubscribe = subscribeToRealtimeEvents(async (message) => {
                 if (isRetryLifecycleMessage(message)) {
@@ -250,29 +257,58 @@ const Monitoring = () => {
 
             <div className="space-y-5">
 
-                <div className="flex items-center justify-between">
+                    <div className="flex items-center justify-between">
 
-                    <div>
-                        <h2 className="text-2xl font-bold text-[#1F2937]">
-                            Live Event Stream
-                        </h2>
+                        <div>
+                            <h2 className="text-2xl font-bold text-[#1F2937]">
+                                Live Event Stream
+                            </h2>
 
-                        <p className="text-sm text-[#6B7280] mt-1">
-                            Realtime webhook delivery monitoring
-                        </p>
+                            <p className="text-sm text-[#6B7280] mt-1">
+                                Realtime webhook delivery monitoring
+                            </p>
+                        </div>
+
+                        <div className="flex items-center gap-4">
+
+                            <div className="flex items-center gap-2">
+                                <button
+                                    onClick={() => {
+                                        const prev = Math.max(0, page - 1)
+                                        setPage(prev)
+                                        fetchEvents({ silent: true, pageOverride: prev })
+                                    }}
+                                    disabled={page === 0}
+                                    className="px-3 py-1 text-sm rounded-lg border border-[#E5E7EB] text-[#6B7280] hover:bg-[#F8FAFC] disabled:opacity-30"
+                                >
+                                    Prev
+                                </button>
+                                <span className="text-sm text-[#6B7280]">
+                                    {totalEvents > 0
+                                        ? `${page * PAGE_SIZE + 1}-${Math.min((page + 1) * PAGE_SIZE, totalEvents)} of ${totalEvents}`
+                                        : "0 events"}
+                                </span>
+                                <button
+                                    onClick={() => {
+                                        const next = page + 1
+                                        setPage(next)
+                                        fetchEvents({ silent: true, pageOverride: next })
+                                    }}
+                                    disabled={(page + 1) * PAGE_SIZE >= totalEvents}
+                                    className="px-3 py-1 text-sm rounded-lg border border-[#E5E7EB] text-[#6B7280] hover:bg-[#F8FAFC] disabled:opacity-30"
+                                >
+                                    Next
+                                </button>
+                            </div>
+
+                            <div className="flex items-center gap-2">
+                                <div className="w-2.5 h-2.5 rounded-full bg-green-500 animate-pulse"></div>
+                                <span className="text-sm font-semibold text-green-600">Live</span>
+                            </div>
+
+                        </div>
+
                     </div>
-
-                    <div className="flex items-center gap-2">
-
-                        <div className="w-2.5 h-2.5 rounded-full bg-green-500 animate-pulse"></div>
-
-                        <span className="text-sm font-semibold text-green-600">
-                            Live
-                        </span>
-
-                    </div>
-
-                </div>
 
                 {loading ? (
 

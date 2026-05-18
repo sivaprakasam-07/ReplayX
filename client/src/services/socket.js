@@ -3,8 +3,17 @@ const DEFAULT_WS_URL = "ws://127.0.0.1:8000/ws/events"
 let socket = null
 let reconnectTimer = null
 const subscribers = new Set()
+const statusListeners = new Set()
+let currentStatus = "disconnected"
 
 const getWebSocketUrl = () => import.meta.env.VITE_WS_URL || DEFAULT_WS_URL
+
+const notifyStatus = (status) => {
+    currentStatus = status
+    statusListeners.forEach((cb) => {
+        try { cb(status) } catch (e) { console.error(e) }
+    })
+}
 
 const normalizeMessage = (message) => ({
     type: message?.type || message?.data?.type || "unknown",
@@ -42,6 +51,7 @@ const connect = () => {
         reconnectTimer = null
     }
 
+    notifyStatus("connecting")
     socket = new WebSocket(getWebSocketUrl())
 
     socket.onmessage = (event) => {
@@ -56,6 +66,7 @@ const connect = () => {
 
     socket.onopen = () => {
         console.info('[socket] connected to', getWebSocketUrl())
+        notifyStatus("connected")
     }
 
     socket.onerror = (error) => {
@@ -64,6 +75,7 @@ const connect = () => {
 
     socket.onclose = () => {
         socket = null
+        notifyStatus("disconnected")
         if (subscribers.size > 0) {
             reconnectTimer = window.setTimeout(() => {
                 reconnectTimer = null
@@ -98,6 +110,12 @@ export const subscribeToRealtimeEvents = (handler) => {
             }
         }
     }
+}
+
+export const subscribeToConnectionStatus = (callback) => {
+    statusListeners.add(callback)
+    callback(currentStatus)
+    return () => statusListeners.delete(callback)
 }
 
 export const isRetryLifecycleMessage = (message) =>

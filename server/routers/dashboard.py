@@ -38,7 +38,7 @@ async def get_dashboard_metrics():
     )
 
 @router.get("/retries/analytics", response_model=EnrichedRetryAnalyticsResponse)
-async def get_retry_analytics():
+async def get_retry_analytics(limit: int = 10, skip: int = 0):
     db = get_db()
     
     pipeline = [
@@ -88,8 +88,8 @@ async def get_retry_analytics():
     
     recent_cursor = db.delivery_attempts.find(
         {"attempt_number": {"$gt": 1}}
-    ).sort("attempted_at", -1).limit(10)
-    raw_events = await recent_cursor.to_list(length=10)
+    ).sort("attempted_at", -1).skip(skip).limit(limit)
+    raw_events = await recent_cursor.to_list(length=limit)
     retry_events = []
     for att in raw_events:
         ev = await db.events.find_one({"event_id": att["event_id"]})
@@ -133,6 +133,7 @@ async def get_retry_analytics():
         "ml_predictions": ml_predictions,
         "failure_patterns": [p.dict() for p in failure_patterns],
         "retry_events": retry_events,
+        "total_retry_events": total_retries,
     }
 
 @router.get("/endpoints/health", response_model=List[EndpointHealth])
@@ -156,15 +157,18 @@ async def get_endpoints_health():
     return health_data
 
 @router.get("/replay/recommendations", response_model=List[EnrichedReplayRecommendation])
-async def get_replay_recommendations():
+async def get_replay_recommendations(limit: int = 10, skip: int = 0):
     db = get_db()
     
-    cursor = db.delivery_attempts.aggregate([
+    pipeline = [
         {"$match": {"http_status": {"$gte": 400}}},
         {"$group": {"_id": "$event_id", "attempt_number": {"$max": "$attempt_number"}}},
-        {"$limit": 10},
-    ])
-    groups = await cursor.to_list(length=10)
+        {"$sort": {"_id": 1}},
+        {"$skip": skip},
+        {"$limit": limit},
+    ]
+    cursor = db.delivery_attempts.aggregate(pipeline)
+    groups = await cursor.to_list(length=limit)
     
     recommendations = []
     for g in groups:

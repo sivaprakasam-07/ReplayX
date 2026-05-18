@@ -7,6 +7,7 @@ import {
     getReplayRecommendations,
     executeReplay,
 } from "../services/api/replayApi"
+import { subscribeToRealtimeEvents } from "../services/socket"
 
 const ReplayCenter = () => {
 
@@ -14,11 +15,14 @@ const ReplayCenter = () => {
     const [loading, setLoading] = useState(true)
     const [execMsg, setExecMsg] = useState(null)
     const [execLoading, setExecLoading] = useState(false)
+    const [replayPage, setReplayPage] = useState(0)
+    const REPLAY_PAGE_SIZE = 10
 
-    const fetchReplays = async () => {
+    const fetchReplays = async (pageOverride) => {
         setLoading(true)
         try {
-            const data = await getReplayRecommendations()
+            const p = pageOverride != null ? pageOverride : replayPage
+            const data = await getReplayRecommendations(REPLAY_PAGE_SIZE, p * REPLAY_PAGE_SIZE)
             const unique = Array.from(
                 new Map(data.map((item) => [item.event_id, item])).values()
             )
@@ -31,19 +35,13 @@ const ReplayCenter = () => {
     }
 
     useEffect(() => {
-        const ws = new WebSocket(`ws://${window.location.hostname}:8000/ws`)
-        ws.onmessage = (event) => {
-            const msg = JSON.parse(event.data)
-            if (msg.type === "OPERATION_UPDATE" && msg.data?.operation_type === "replay") {
+        fetchReplays()
+        const unsub = subscribeToRealtimeEvents((message) => {
+            if (message.raw?.type === "OPERATION_UPDATE" && message.raw?.data?.operation_type === "replay") {
                 fetchReplays()
             }
-        }
-        ws.onclose = () => setTimeout(() => {
-            const ws2 = new WebSocket(`ws://${window.location.hostname}:8000/ws`)
-            ws2.onmessage = ws.onmessage
-        }, 3000)
-        fetchReplays()
-        return () => ws.close()
+        })
+        return () => unsub()
     }, [])
 
     const handleExecuteReplay = async (eventId) => {
@@ -118,13 +116,40 @@ const ReplayCenter = () => {
             <div className="grid grid-cols-1 xl:grid-cols-3 gap-6">
 
                 <div className="xl:col-span-2 bg-white border border-[#E5E7EB] rounded-2xl p-6 shadow-sm">
-                    <div className="mb-6">
-                        <h2 className="text-2xl font-bold text-[#1F2937]">Replay Recommendations</h2>
-                        <p className="text-sm text-[#6B7280] mt-1">AI-assisted replay safety intelligence</p>
+                    <div className="flex items-center justify-between mb-6">
+                        <div>
+                            <h2 className="text-2xl font-bold text-[#1F2937]">Replay Recommendations</h2>
+                            <p className="text-sm text-[#6B7280] mt-1">AI-assisted replay safety intelligence</p>
+                        </div>
+                        <div className="flex items-center gap-2">
+                            <button
+                                onClick={() => {
+                                    const prev = Math.max(0, replayPage - 1)
+                                    setReplayPage(prev)
+                                    fetchReplays(prev)
+                                }}
+                                disabled={replayPage === 0}
+                                className="px-3 py-1 text-sm rounded-lg border border-[#E5E7EB] text-[#6B7280] hover:bg-[#F8FAFC] disabled:opacity-30"
+                            >
+                                Prev
+                            </button>
+                            <span className="text-sm text-[#6B7280]">Page {replayPage + 1}</span>
+                            <button
+                                onClick={() => {
+                                    const next = replayPage + 1
+                                    setReplayPage(next)
+                                    fetchReplays(next)
+                                }}
+                                disabled={replays.length < REPLAY_PAGE_SIZE}
+                                className="px-3 py-1 text-sm rounded-lg border border-[#E5E7EB] text-[#6B7280] hover:bg-[#F8FAFC] disabled:opacity-30"
+                            >
+                                Next
+                            </button>
+                        </div>
                     </div>
 
                     <div className="space-y-5">
-                        {replays.slice(0, 5).map((replay) => (
+                        {replays.map((replay) => (
                             <div key={replay.event_id} className={`rounded-2xl p-5 border ${replay.safe_to_replay ? "border-green-200 bg-green-50" : "border-red-200 bg-red-50"}`}>
                                 <div className="flex items-center justify-between">
                                     <div className="flex-1">

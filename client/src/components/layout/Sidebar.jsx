@@ -1,4 +1,5 @@
 import {
+    Home,
     LayoutDashboard,
     Activity,
     RefreshCcw,
@@ -12,8 +13,13 @@ import { motion } from "framer-motion"
 
 const navItems = [
     {
-        name: "Dashboard",
+        name: "Home",
         path: "/",
+        icon: Home,
+    },
+    {
+        name: "Dashboard",
+        path: "/dashboard",
         icon: LayoutDashboard,
     },
     {

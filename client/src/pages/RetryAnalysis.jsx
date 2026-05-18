@@ -1,20 +1,12 @@
-<<<<<<< HEAD
-import { useEffect, useState, useCallback } from "react"
-=======
-import { useEffect, useState } from "react"
+import { useEffect, useState, useCallback, useRef } from "react"
 import toast from "react-hot-toast"
->>>>>>> 9a1a6fcb6e44cbb9ce0a0364b9527202c33d2094
 import MetricCard from "../components/cards/MetricCard"
 import RetryTimelineChart from "../components/charts/RetryTimelineChart"
 import RetryTable from "../components/tables/RetryTable"
 import StatusPill from "../components/common/StatusPill"
-<<<<<<< HEAD
-import { getRetryAnalytics, triggerRetry, getOperationsQueue, processPendingOperations, getOperationHistory } from "../services/api/retryApi"
-=======
 import EventToast from "../components/common/EventToast"
-import { getRetryAnalytics, triggerRetry, getOperationsQueue, processPendingOperations } from "../services/api/retryApi"
+import { getRetryAnalytics, triggerRetry, getOperationsQueue, processPendingOperations, getOperationHistory } from "../services/api/retryApi"
 import { subscribeToRealtimeEvents, isRetryLifecycleMessage } from "../services/socket"
->>>>>>> 9a1a6fcb6e44cbb9ce0a0364b9527202c33d2094
 
 const RetryAnalysis = () => {
     // fallback dedupe for environments where toast.isActive is unavailable
@@ -26,14 +18,23 @@ const RetryAnalysis = () => {
     const [triggerLoading, setTriggerLoading] = useState(false)
     const [transitions, setTransitions] = useState([])
     const [selectedEventId, setSelectedEventId] = useState(null)
+    const selectedRef = useRef(null)
 
-    const fetchData = async ({ silent = false } = {}) => {
+    const [retryPage, setRetryPage] = useState(0)
+    const [queuePage, setQueuePage] = useState(0)
+    const [totalRetryEvents, setTotalRetryEvents] = useState(0)
+    const RETRY_PAGE_SIZE = 10
+    const QUEUE_PAGE_SIZE = 10
+
+    const fetchData = async ({ silent = false, pageOverride } = {}) => {
         try {
             if (!silent) {
                 setLoading(true)
             }
-            const result = await getRetryAnalytics()
+            const p = pageOverride != null ? pageOverride : retryPage
+            const result = await getRetryAnalytics(RETRY_PAGE_SIZE, p * RETRY_PAGE_SIZE)
             setData(result)
+            setTotalRetryEvents(result?.total_retry_events ?? 0)
         } catch (e) {
             console.error(e)
         } finally {
@@ -43,14 +44,19 @@ const RetryAnalysis = () => {
         }
     }
 
-    const fetchQueue = useCallback(async () => {
+    const fetchQueue = useCallback(async (pageOverride) => {
         try {
-            const q = await getOperationsQueue("all")
-            setQueue(q)
+            const p = pageOverride != null ? pageOverride : queuePageRef.current
+            const q = await getOperationsQueue("all", QUEUE_PAGE_SIZE, p * QUEUE_PAGE_SIZE)
+            setQueue(q?.operations ?? (Array.isArray(q) ? q : []))
         } catch (e) {
             console.error(e)
         }
     }, [])
+
+    const queuePageRef = useRef(0)
+    const fetchQueueRef = useRef(fetchQueue)
+    fetchQueueRef.current = fetchQueue
 
     const fetchHistory = useCallback(async (eventId) => {
         try {
@@ -62,37 +68,24 @@ const RetryAnalysis = () => {
     }, [])
 
     useEffect(() => {
-<<<<<<< HEAD
-        const ws = new WebSocket(`ws://${window.location.hostname}:8000/ws`)
-        ws.onmessage = (event) => {
-            const msg = JSON.parse(event.data)
-            if (msg.type === "OPERATION_UPDATE" || msg.type === "STATE_TRANSITION") {
-                fetchQueue()
-                if (msg.data?.event_id && selectedEventId === msg.data.event_id) {
-                    fetchHistory(msg.data.event_id)
-                }
-            }
-        }
-        ws.onclose = () => setTimeout(() => {
-            const ws2 = new WebSocket(`ws://${window.location.hostname}:8000/ws`)
-            ws2.onmessage = ws.onmessage
-        }, 3000)
-        fetchData()
-        fetchQueue()
-        const interval = setInterval(fetchQueue, 10000)
-        return () => { clearInterval(interval); ws.close() }
-    }, [fetchQueue, fetchHistory, selectedEventId])
-=======
         const loadInitialData = async () => {
             await Promise.all([
                 fetchData(),
-                fetchQueue(),
+                fetchQueueRef.current(),
             ])
         }
 
         loadInitialData()
 
         const unsubscribe = subscribeToRealtimeEvents(async (message) => {
+            if (message.type === "STATE_TRANSITION") {
+                fetchQueueRef.current()
+                if (message.event_id && selectedRef.current === message.event_id) {
+                    fetchHistory(message.event_id)
+                }
+                return
+            }
+
             if (!isRetryLifecycleMessage(message)) {
                 return
             }
@@ -119,17 +112,20 @@ const RetryAnalysis = () => {
 
             await Promise.all([
                 fetchData({ silent: true }),
-                fetchQueue(),
+                fetchQueueRef.current(),
             ])
         })
 
-        const interval = setInterval(fetchQueue, 10000)
+        const interval = setInterval(() => fetchQueueRef.current(), 10000)
         return () => {
             clearInterval(interval)
             unsubscribe()
         }
     }, [])
->>>>>>> 9a1a6fcb6e44cbb9ce0a0364b9527202c33d2094
+
+    useEffect(() => {
+        selectedRef.current = selectedEventId
+    }, [selectedEventId])
 
     const handleTriggerRetry = async () => {
         setTriggerLoading(true)
@@ -252,14 +248,45 @@ const RetryAnalysis = () => {
                 )}
             </div>
 
-            {queue.filter(o => o.status !== "completed").length > 0 && (
+            {queue.length > 0 && (
                 <div className="bg-white border border-[#E5E7EB] rounded-2xl p-6 shadow-sm">
-                    <h3 className="text-lg font-bold text-[#1F2937] mb-4">Active Operations Queue</h3>
+                    <div className="flex items-center justify-between mb-4">
+                        <h3 className="text-lg font-bold text-[#1F2937]">Active Operations Queue</h3>
+                        <div className="flex items-center gap-2">
+                            <button
+                                onClick={() => {
+                                    const prev = Math.max(0, queuePage - 1)
+                                    setQueuePage(prev)
+                                    queuePageRef.current = prev
+                                    fetchQueue(prev)
+                                }}
+                                disabled={queuePage === 0}
+                                className="px-3 py-1 text-sm rounded-lg border border-[#E5E7EB] text-[#6B7280] hover:bg-[#F8FAFC] disabled:opacity-30"
+                            >
+                                Prev
+                            </button>
+                            <span className="text-sm text-[#6B7280]">
+                                Page {queuePage + 1}
+                            </span>
+                            <button
+                                onClick={() => {
+                                    const next = queuePage + 1
+                                    setQueuePage(next)
+                                    queuePageRef.current = next
+                                    fetchQueue(next)
+                                }}
+                                disabled={queue.length < QUEUE_PAGE_SIZE}
+                                className="px-3 py-1 text-sm rounded-lg border border-[#E5E7EB] text-[#6B7280] hover:bg-[#F8FAFC] disabled:opacity-30"
+                            >
+                                Next
+                            </button>
+                        </div>
+                    </div>
                     <div className="space-y-3">
                         {queue.filter(o => o.status !== "completed").map(op => (
                             <div key={op.operation_id}
                                  className="flex items-center justify-between p-3 rounded-xl bg-[#F8FAFC] border border-[#E5E7EB] cursor-pointer hover:bg-[#E5E7EB]"
-                                 onClick={() => { setSelectedEventId(op.event_id); fetchHistory(op.event_id) }}>
+                                 onClick={() => { selectedRef.current = op.event_id; setSelectedEventId(op.event_id); fetchHistory(op.event_id) }}>
                                 <div>
                                     <p className="text-sm font-semibold">{op.operation_id}</p>
                                     <p className="text-xs text-[#6B7280]">Event: {op.event_id} | Type: {op.operation_type} | Attempt: {op.attempt_number}</p>
@@ -294,9 +321,40 @@ const RetryAnalysis = () => {
             )}
 
             <div className="space-y-5">
-                <div>
-                    <h2 className="text-2xl font-bold text-[#1F2937]">Retry Queue Activity</h2>
-                    <p className="text-sm text-[#6B7280] mt-1">Live retry processing and recovery operations</p>
+                <div className="flex items-center justify-between">
+                    <div>
+                        <h2 className="text-2xl font-bold text-[#1F2937]">Retry Queue Activity</h2>
+                        <p className="text-sm text-[#6B7280] mt-1">Live retry processing and recovery operations</p>
+                    </div>
+                    <div className="flex items-center gap-2">
+                        <button
+                            onClick={() => {
+                                const prev = Math.max(0, retryPage - 1)
+                                setRetryPage(prev)
+                                fetchData({ silent: true, pageOverride: prev })
+                            }}
+                            disabled={retryPage === 0}
+                            className="px-3 py-1 text-sm rounded-lg border border-[#E5E7EB] text-[#6B7280] hover:bg-[#F8FAFC] disabled:opacity-30"
+                        >
+                            Prev
+                        </button>
+                        <span className="text-sm text-[#6B7280]">
+                            {totalRetryEvents > 0
+                                ? `${retryPage * RETRY_PAGE_SIZE + 1}-${Math.min((retryPage + 1) * RETRY_PAGE_SIZE, totalRetryEvents)} of ${totalRetryEvents}`
+                                : "0 events"}
+                        </span>
+                        <button
+                            onClick={() => {
+                                const next = retryPage + 1
+                                setRetryPage(next)
+                                fetchData({ silent: true, pageOverride: next })
+                            }}
+                            disabled={(retryPage + 1) * RETRY_PAGE_SIZE >= totalRetryEvents}
+                            className="px-3 py-1 text-sm rounded-lg border border-[#E5E7EB] text-[#6B7280] hover:bg-[#F8FAFC] disabled:opacity-30"
+                        >
+                            Next
+                        </button>
+                    </div>
                 </div>
                 <RetryTable events={retryEvents} />
             </div>

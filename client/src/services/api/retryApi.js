@@ -1,9 +1,9 @@
 import api from "./axios"
 import { retryData, retryEvents } from "../../data/retryData"
 
-export const getRetryAnalytics = async () => {
+export const getRetryAnalytics = async (limit = 10, skip = 0) => {
     try {
-        const response = await api.get(`/retries/analytics`)
+        const response = await api.get(`/retries/analytics?limit=${limit}&skip=${skip}`)
         return response.data
     } catch (error) {
         console.error("Failed to fetch retry analytics, returning fallback:", error)
@@ -41,13 +41,13 @@ export const triggerRetry = async (eventId) => {
     }
 }
 
-export const getOperationsQueue = async (status = "all") => {
+export const getOperationsQueue = async (status = "all", limit = 50, skip = 0) => {
     try {
-        const response = await api.get(`/operations/queue?status=${status}`)
+        const response = await api.get(`/operations/queue?status=${status}&limit=${limit}&skip=${skip}`)
         return response.data
     } catch (error) {
         console.error("Failed to fetch operations queue:", error)
-        return []
+        return { total: 0, limit, skip, operations: [] }
     }
 }
 
@@ -61,9 +61,9 @@ export const processPendingOperations = async () => {
     }
 }
 
-export const getOperationHistory = async (eventId) => {
+export const getOperationHistory = async (eventId, limit = 50, skip = 0) => {
     try {
-        const response = await api.get(`/operations/history/${eventId}`)
+        const response = await api.get(`/operations/history/${eventId}?limit=${limit}&skip=${skip}`)
         return response.data
     } catch (error) {
         console.error("Failed to fetch operation history:", error)

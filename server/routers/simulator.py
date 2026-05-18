@@ -15,9 +15,18 @@ async def simulate_event(status_type: str):
     event_id = f"EVT_SIM_{uuid.uuid4().hex[:8].upper()}"
     endpoint_id = f"EP_{random.randint(100, 999)}"
 
+    event_type_map = {
+        "success": random.choice(["invoice.created", "payment.completed", "subscription.activated"]),
+        "failure": random.choice(["compliance.failed", "payment.failed", "endpoint.deleted"]),
+        "retry": random.choice(["retry.attempt", "webhook.retry", "delivery.retry"]),
+        "replay": random.choice(["replay.request", "webhook.replay", "delivery.replay"]),
+        "trigger_retry": random.choice(["retry.triggered", "auto.retry", "scheduled.retry"]),
+        "trigger_replay": random.choice(["replay.triggered", "auto.replay", "scheduled.replay"]),
+    }
+
     event = {
         "event_id": event_id,
-        "event_type": random.choice(["invoice.created", "invoice.rejected", "compliance.failed"]),
+        "event_type": event_type_map.get(status_type, "webhook.generic"),
         "customer_id": f"CUST_{random.randint(1000, 9999)}",
         "created_at": datetime.utcnow().isoformat() + "Z",
         "payload_size_kb": round(random.uniform(10.0, 50.0), 2),

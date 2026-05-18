@@ -81,12 +81,13 @@ async def api_schedule_auto(event_id: str):
     return result
 
 
-@router.get("/operations/queue", response_model=List[OperationStatus])
-async def list_operations_queue(status: str = "pending"):
+@router.get("/operations/queue")
+async def list_operations_queue(status: str = "pending", limit: int = 50, skip: int = 0):
     db = get_db()
     query = {"status": status} if status != "all" else {}
-    cursor = db.operations.find(query).sort("scheduled_at", 1).limit(50)
-    ops = await cursor.to_list(length=50)
+    total = await db.operations.count_documents(query)
+    cursor = db.operations.find(query).sort("scheduled_at", 1).skip(skip).limit(limit)
+    ops = await cursor.to_list(length=limit)
     result = []
     for op in ops:
         result.append(OperationStatus(
@@ -101,7 +102,7 @@ async def list_operations_queue(status: str = "pending"):
             created_at=op["created_at"],
             updated_at=op["updated_at"],
         ))
-    return result
+    return {"total": total, "limit": limit, "skip": skip, "operations": result}
 
 
 @router.post("/operations/process/{operation_id}")
@@ -136,12 +137,14 @@ async def api_process_all_pending():
 
 
 @router.get("/operations/history/{event_id}")
-async def get_operation_history(event_id: str):
+async def get_operation_history(event_id: str, limit: int = 50, skip: int = 0):
     db = get_db()
-    ops_cursor = db.operations.find({"event_id": event_id}).sort("created_at", 1)
-    ops = await ops_cursor.to_list(length=100)
+    total_ops = await db.operations.count_documents({"event_id": event_id})
+    total_transitions = await db.state_transitions.count_documents({"event_id": event_id})
+    ops_cursor = db.operations.find({"event_id": event_id}).sort("created_at", 1).skip(skip).limit(limit)
+    ops = await ops_cursor.to_list(length=limit)
     transitions_cursor = db.state_transitions.find({"event_id": event_id}).sort("timestamp", 1)
-    transitions = await transitions_cursor.to_list(length=500)
+    transitions = await transitions_cursor.to_list(length=200)
     for t in transitions:
         t.pop("_id", None)
     event = await db.events.find_one({"event_id": event_id})
@@ -160,6 +163,8 @@ async def get_operation_history(event_id: str):
     return {
         "event_id": event_id,
         "current_delivery_state": event.get("delivery_state") if event else None,
+        "total_operations": total_ops,
+        "total_transitions": total_transitions,
         "operations": history,
         "state_transitions": transitions,
     }

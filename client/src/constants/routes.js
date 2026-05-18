@@ -1,5 +1,6 @@
 export const routes = {
-    dashboard: "/",
+    home: "/",
+    dashboard: "/dashboard",
     monitoring: "/monitoring",
     retries: "/retries",
     replay: "/replay",

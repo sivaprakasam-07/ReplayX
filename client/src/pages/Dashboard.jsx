@@ -9,6 +9,7 @@ import {
     getDashboardMetrics,
     getRetryAnalytics,
 } from "../services/api/dashboardApi"
+import { subscribeToRealtimeEvents } from "../services/socket"
 
 const STORAGE_KEY = "replayx:delivery-chart"
 
@@ -134,82 +135,39 @@ const Dashboard = () => {
 
                     setLoading(true)
 
-                    const metricsData =
-                        await getDashboardMetrics()
+                    const [metricsData, analyticsData] = await Promise.all([
+                        getDashboardMetrics(),
+                        getRetryAnalytics(),
+                    ])
 
                     if (metricsData) {
-
                         setMetrics({
-
-                            totalEvents:
-                                metricsData.total_events,
-
-                            failed:
-                                metricsData.failed_deliveries,
-
-                            safety:
-                                metricsData.retry_success_rate,
-
-                            endpointsCount:
-                                metricsData.critical_endpoints,
-
+                            totalEvents: metricsData.total_events,
+                            failed: metricsData.failed_deliveries,
+                            safety: metricsData.retry_success_rate,
+                            endpointsCount: metricsData.critical_endpoints,
                         })
+                        setLoading(false)
                     }
-
-                    const analyticsData =
-                        await getRetryAnalytics()
 
                     if (
                         analyticsData?.timeline &&
-                        Array.isArray(
-                            analyticsData.timeline
-                        )
-                        && (!cachedChartData || cachedChartData.length === 0)
+                        Array.isArray(analyticsData.timeline) &&
+                        (!cachedChartData || cachedChartData.length === 0)
                     ) {
+                        const formattedTimeline = analyticsData.timeline.map((item) => ({
+                            time: item.time || item.hour || item.timestamp || "00:00",
+                            success: item.success || item.success_count || item.delivered || 0,
+                            failed: item.failed || item.failed_count || item.errors || 0,
+                        }))
 
-                        const formattedTimeline =
-                            analyticsData.timeline.map(
-                                (item) => ({
-
-                                    time:
-                                        item.time ||
-                                        item.hour ||
-                                        item.timestamp ||
-                                        "00:00",
-
-                                    success:
-                                        item.success ||
-                                        item.success_count ||
-                                        item.delivered ||
-                                        0,
-
-                                    failed:
-                                        item.failed ||
-                                        item.failed_count ||
-                                        item.errors ||
-                                        0,
-
-                                })
-                            )
-
-                        setDeliveryChartData(
-                            formattedTimeline
-                        )
-
-                        writeStoredChartData(
-                            formattedTimeline
-                        )
+                        setDeliveryChartData(formattedTimeline)
+                        writeStoredChartData(formattedTimeline)
                     }
 
                 } catch (error) {
-
-                    console.error(
-                        "Failed to fetch dashboard data:",
-                        error
-                    )
-
+                    console.error("Failed to fetch dashboard data:", error)
                 } finally {
-
                     setLoading(false)
                 }
             }
@@ -219,217 +177,49 @@ const Dashboard = () => {
     }, [])
 
     useEffect(() => {
-
-        let socket = null
-
         let activityCounter = 0
+        const unsub = subscribeToRealtimeEvents((message) => {
+            const eventObj = message?.data?.event
+            if (!eventObj || !eventObj.event_id) return
 
-        const wsUrl =
-            import.meta.env.VITE_WS_URL ||
-            "ws://127.0.0.1:8000/ws/events"
+            setActivityItems((prev) => {
+                const newActivity = eventToActivity(eventObj, activityCounter++)
+                return [newActivity, ...prev].slice(0, 4)
+            })
 
-        try {
+            setMetrics((prev) => ({
+                ...prev,
+                totalEvents: (prev.totalEvents === "--" ? 1 : parseInt(prev.totalEvents) + 1) || 1,
+            }))
 
-            socket =
-                new WebSocket(wsUrl)
+            setDeliveryChartData((prev) => {
+                const currentHour = new Date().getHours().toString().padStart(2, "0") + ":00"
+                let updated = [...prev]
+                const existingIndex = updated.findIndex((item) => item.time === currentHour)
 
-            socket.onopen = () => {
-
-                console.log(
-                    "Dashboard WebSocket Connected"
-                )
-            }
-
-            socket.onmessage = (
-                event
-            ) => {
-
-                try {
-
-                    const message =
-                        JSON.parse(event.data)
-
-                    const eventObj =
-                        message?.data?.event
-
-                    if (
-                        !eventObj ||
-                        !eventObj.event_id
-                    ) return
-
-                    setActivityItems(
-                        (prev) => {
-
-                            const newActivity =
-                                eventToActivity(
-                                    eventObj,
-                                    activityCounter++
-                                )
-
-                            return [
-                                newActivity,
-                                ...prev,
-                            ].slice(0, 4)
+                if (existingIndex >= 0) {
+                    updated = updated.map((item, index) => {
+                        if (index !== existingIndex) return item
+                        return {
+                            ...item,
+                            success: eventObj.delivery_state === "failed" ? item.success : item.success + 25,
+                            failed: eventObj.delivery_state === "failed" ? item.failed + 8 : item.failed,
                         }
-                    )
-
-                    setMetrics(
-                        (prev) => ({
-
-                            ...prev,
-
-                            totalEvents:
-                                (
-                                    prev.totalEvents ===
-                                        "--"
-                                        ? 1
-                                        : parseInt(
-                                            prev.totalEvents
-                                        ) + 1
-                                ) || 1,
-
-                        })
-                    )
-
-                    setDeliveryChartData(
-                        (prev) => {
-
-                            const currentHour =
-                                new Date()
-                                    .getHours()
-                                    .toString()
-                                    .padStart(
-                                        2,
-                                        "0"
-                                    ) + ":00"
-
-                            let updated =
-                                [...prev]
-
-                            const existingIndex =
-                                updated.findIndex(
-                                    (
-                                        item
-                                    ) =>
-                                        item.time ===
-                                        currentHour
-                                )
-
-                            if (
-                                existingIndex >= 0
-                            ) {
-
-                                updated =
-                                    updated.map(
-                                        (
-                                            item,
-                                            index
-                                        ) => {
-
-                                            if (
-                                                index !==
-                                                existingIndex
-                                            ) {
-                                                return item
-                                            }
-
-                                            return {
-
-                                                ...item,
-
-                                                success:
-                                                    eventObj.delivery_state ===
-                                                        "failed"
-                                                        ? item.success
-                                                        : item.success + 25,
-
-                                                failed:
-                                                    eventObj.delivery_state ===
-                                                        "failed"
-                                                        ? item.failed + 8
-                                                        : item.failed,
-
-                                            }
-                                        }
-                                    )
-
-                            } else {
-
-                                updated.push({
-
-                                    time:
-                                        currentHour,
-
-                                    success:
-                                        eventObj.delivery_state ===
-                                            "failed"
-                                            ? 10
-                                            : 25,
-
-                                    failed:
-                                        eventObj.delivery_state ===
-                                            "failed"
-                                            ? 8
-                                            : 2,
-
-                                })
-                            }
-
-                            writeStoredChartData(updated)
-
-                            return updated
-                        }
-                    )
-
-                } catch (e) {
-
-                    console.error(
-                        "Failed to parse websocket message:",
-                        e
-                    )
+                    })
+                } else {
+                    updated.push({
+                        time: currentHour,
+                        success: eventObj.delivery_state === "failed" ? 10 : 25,
+                        failed: eventObj.delivery_state === "failed" ? 8 : 2,
+                    })
                 }
-            }
 
-            socket.onerror = (
-                error
-            ) => {
+                writeStoredChartData(updated)
+                return updated
+            })
+        })
 
-                console.error(
-                    "Dashboard WebSocket Error:",
-                    error
-                )
-            }
-
-            socket.onclose = () => {
-
-                console.log(
-                    "Dashboard WebSocket Disconnected"
-                )
-            }
-
-        } catch (err) {
-
-            console.error(
-                "WebSocket connection failed:",
-                err
-            )
-        }
-
-        return () => {
-
-            if (socket) {
-
-                try {
-
-                    socket.close()
-
-                } catch (e) {
-
-                    console.error(e)
-                }
-            }
-        }
-
+        return () => unsub()
     }, [])
 
     return (
@@ -452,118 +242,95 @@ const Dashboard = () => {
 
             <motion.div
                 className="grid grid-cols-1 gap-5 md:grid-cols-2 xl:grid-cols-4"
-                initial={{
-                    opacity: 0,
-                    y: 6,
-                }}
-                animate={{
-                    opacity: 1,
-                    y: 0,
-                }}
-                transition={{
-                    duration: 0.45,
+                initial="hidden"
+                animate={loading ? "hidden" : "visible"}
+                variants={{
+                    hidden: {},
+                    visible: { transition: { staggerChildren: 0.12 } },
                 }}
             >
-
-                <MetricCard
-                    title="Total Events"
-                    value={metrics?.totalEvents ?? "--"}
-                    change="+3.2%"
-                    status="positive"
-                    loading={loading}
-                />
-
-                <MetricCard
-                    title="Failed Deliveries"
-                    value={metrics?.failed ?? "--"}
-                    change="-1.4%"
-                    status="negative"
-                    loading={loading}
-                />
-
-                <MetricCard
-                    title="Replay Safety"
-                    value={`${metrics?.safety ?? "--"}%`}
-                    change="0.2%"
-                    status="positive"
-                    loading={loading}
-                />
-
-                <MetricCard
-                    title="Critical Endpoints"
-                    value={metrics?.endpointsCount ?? "--"}
-                    change="+2.3%"
-                    status="negative"
-                    loading={loading}
-                />
-
+                {[
+                    { title: "Total Events", value: metrics?.totalEvents ?? "--", change: "+3.2%", status: "positive" },
+                    { title: "Failed Deliveries", value: metrics?.failed ?? "--", change: "-1.4%", status: "negative" },
+                    { title: "Replay Safety", value: `${metrics?.safety ?? "--"}%`, change: "0.2%", status: "positive" },
+                    { title: "Critical Endpoints", value: metrics?.endpointsCount ?? "--", change: "+2.3%", status: "negative" },
+                ].map((card, i) => (
+                    <motion.div
+                        key={card.title}
+                        variants={{
+                            hidden: { opacity: 0, y: 10 },
+                            visible: { opacity: 1, y: 0 },
+                        }}
+                    >
+                        <MetricCard
+                            title={card.title}
+                            value={card.value}
+                            change={card.change}
+                            status={card.status}
+                            loading={loading}
+                        />
+                    </motion.div>
+                ))}
             </motion.div>
 
-            <div className="grid grid-cols-1 gap-6 xl:grid-cols-3">
-
-                <div className="xl:col-span-2 bg-white border border-[#E5E7EB] rounded-2xl p-6 shadow-sm hover:shadow-md transition-all duration-300">
-
+            <motion.div
+                className="grid grid-cols-1 gap-6 xl:grid-cols-3"
+                initial="hidden"
+                animate={loading ? "hidden" : "visible"}
+                variants={{
+                    hidden: {},
+                    visible: { transition: { staggerChildren: 0.15, delayChildren: 0.2 } },
+                }}
+            >
+                <motion.div
+                    variants={{
+                        hidden: { opacity: 0, y: 12 },
+                        visible: { opacity: 1, y: 0 },
+                    }}
+                    className="xl:col-span-2 bg-white border border-[#E5E7EB] rounded-2xl p-6 shadow-sm hover:shadow-md transition-all duration-300"
+                >
                     <div className="flex items-center justify-between mb-6">
-
                         <div>
-
                             <h2 className="text-xl font-bold text-[#1F2937] tracking-tight">
                                 Delivery Traffic
                             </h2>
-
                             <p className="text-sm text-[#6B7280] mt-1">
                                 Webhook delivery trends & retry analytics
                             </p>
-
                         </div>
-
                         <div className="px-3 py-1.5 rounded-full bg-[#EEF2FF] text-[#5B6CFF] text-sm font-semibold">
                             Live
                         </div>
-
                     </div>
+                    <DeliveryTrafficChart data={deliveryChartData} />
+                </motion.div>
 
-                    <DeliveryTrafficChart
-                        data={deliveryChartData}
-                    />
-
-                </div>
-
-                <div className="bg-white border border-[#E5E7EB] rounded-2xl p-6 shadow-sm hover:shadow-md transition-all duration-300">
-
+                <motion.div
+                    variants={{
+                        hidden: { opacity: 0, y: 12 },
+                        visible: { opacity: 1, y: 0 },
+                    }}
+                    className="bg-white border border-[#E5E7EB] rounded-2xl p-6 shadow-sm hover:shadow-md transition-all duration-300"
+                >
                     <div className="flex items-center justify-between mb-6">
-
                         <div>
-
                             <h2 className="text-xl font-bold text-[#1F2937] tracking-tight">
                                 Live Activity
                             </h2>
-
                             <p className="text-sm text-[#6B7280] mt-1">
                                 Realtime operational events
                             </p>
-
                         </div>
-
                         <div className="flex items-center gap-2">
-
                             <div className="w-2.5 h-2.5 rounded-full bg-green-500 animate-pulse"></div>
-
                             <span className="text-sm font-medium text-green-600">
                                 Live
                             </span>
-
                         </div>
-
                     </div>
-
-                    <LiveActivityTable
-                        activities={activityItems}
-                    />
-
-                </div>
-
-            </div>
+                    <LiveActivityTable activities={activityItems} />
+                </motion.div>
+            </motion.div>
 
         </div>
     )
