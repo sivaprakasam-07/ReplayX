@@ -1,4 +1,4 @@
-const DEFAULT_WS_URL = "ws://127.0.0.1:8000/ws/events"
+const WS_EVENTS_PATH = "/ws/events"
 const POLL_INTERVAL = 5000
 
 let socket = null
@@ -9,8 +9,31 @@ const statusListeners = new Set()
 let currentStatus = "disconnected"
 let isPolling = false
 
-const getWebSocketUrl = () => import.meta.env.VITE_WS_URL || DEFAULT_WS_URL
 const getApiBase = () => import.meta.env.VITE_API_BASE_URL || "http://127.0.0.1:8000"
+
+const ensureEventsPath = (url) => {
+    if (url.endsWith("/ws/events")) {
+        return url
+    }
+    if (url.endsWith("/ws")) {
+        return `${url}/events`
+    }
+    return `${url.replace(/\/+$/, "")}${WS_EVENTS_PATH}`
+}
+
+const getWebSocketUrl = () => {
+    const envUrl = import.meta.env.VITE_WS_URL?.trim()
+    if (envUrl) {
+        return ensureEventsPath(envUrl)
+    }
+
+    if (typeof window !== "undefined") {
+        const protocol = window.location.protocol === "https:" ? "wss" : "ws"
+        return `${protocol}://${window.location.host}${WS_EVENTS_PATH}`
+    }
+
+    return WS_EVENTS_PATH
+}
 
 const notifyStatus = (status) => {
     currentStatus = status

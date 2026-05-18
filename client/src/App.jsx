@@ -13,10 +13,8 @@ import DashboardLayout from "./components/layout/DashboardLayout"
 import { subscribeToRealtimeEvents } from "./services/socket"
 
 const App = () => {
-  console.log(import.meta.env.VITE_API_BASE_URL)
-
   useEffect(() => {
-    const unsub = subscribeToRealtimeEvents(() => {})
+    const unsub = subscribeToRealtimeEvents(() => { })
     return () => unsub()
   }, [])
 
